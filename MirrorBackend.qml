@@ -147,10 +147,23 @@ Item {
     stderr: StdioCollector { id: actionErr }
     onExited: function(exitCode) {
       var step = root.steps[0]
+      var verdict = step.onDone(String(actionOut.text || ""), String(actionErr.text || ""), exitCode)
+      if (verdict === "retry" && step.retries > 0) {
+        step.retries -= 1
+        retryTimer.interval = step.retryDelayMs || 500
+        retryTimer.start()
+        return
+      }
       root.steps = root.steps.slice(1)
-      var keepGoing = step.onDone(String(actionOut.text || ""), String(actionErr.text || ""), exitCode)
-      if (keepGoing !== false) root.nextStep()
+      if (verdict === "retry") root.finishSteps(false, "The phone did not come back after switching adb to TCP. Replug it and try again.")
+      else if (verdict !== false) root.nextStep()
     }
+  }
+
+  Timer {
+    id: retryTimer
+    repeat: false
+    onTriggered: root.nextStep()
   }
 
   // Android 11+ wireless debugging: phone shows an ip:port + 6-digit code
@@ -207,13 +220,14 @@ Item {
         }
       },
       {
-        // tcpip restarts adbd on the phone; it drops off the bus for a second.
-        args: ["-s", serial, "wait-for-usb-device"],
-        onDone: function() { return true }
-      },
-      {
+        // tcpip restarts adbd on the phone, so for a few seconds the shell
+        // answers "error: closed" (wait-for-device returns before it even
+        // drops off the bus). Retry until it is back.
         args: ["-s", serial, "shell", "ip route; ip -f inet addr show wlan0"],
+        retries: 20,
+        retryDelayMs: 500,
         onDone: function(out, err, code) {
+          if (code !== 0) return "retry"
           ip = Model.parseWlanIp(out, out)
           if (ip === "") { root.finishSteps(false, "Could not read the phone's Wi-Fi address. Is Wi-Fi on?"); return false }
           return true
