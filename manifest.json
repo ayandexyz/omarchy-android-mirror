@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.ayan-de.android-mirror",
+  "name": "Android Mirror",
+  "version": "0.1.0",
+  "author": "Ayan De",
+  "license": "MIT",
+  "description": "Mirror and control your Android phone from the Omarchy bar: USB or Wi-Fi, keyboard and mouse, low latency, no root. A native panel over adb + scrcpy.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Android Mirror",
+    "description": "One bar icon and one panel: see connected phones, pair over Wi-Fi once, then mirror with keyboard and mouse in a click.",
+    "category": "System",
+    "aliases": [
+      "android",
+      "scrcpy",
+      "phone"
+    ],
+    "defaultSection": "right",
+    "allowMultiple": false,
+    "defaults": {
+      "refreshIntervalSec": 10,
+      "adbPath": "",
+      "scrcpyPath": "",
+      "maxSize": 1080,
+      "bitrateMbps": 8,
+      "turnScreenOff": true,
+      "stayAwake": true,
+      "audio": true,
+      "extraArgs": ""
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "description": "How often `adb devices` is polled while idle. The panel refreshes on open and after every action regardless.",
+        "min": 3,
+        "max": 300,
+        "step": 1,
+        "defaultValue": 10
+      },
+      {
+        "key": "adbPath",
+        "type": "string",
+        "label": "adb path",
+        "description": "Optional. Absolute path to adb; empty means /usr/bin/adb from android-tools. Set this if you use the Android SDK's platform-tools instead.",
+        "defaultValue": ""
+      },
+      {
+        "key": "scrcpyPath",
+        "type": "string",
+        "label": "scrcpy path",
+        "description": "Optional. Absolute path to scrcpy; empty means /usr/bin/scrcpy.",
+        "defaultValue": ""
+      },
+      {
+        "key": "maxSize",
+        "type": "integer",
+        "label": "Max mirror size (px)",
+        "description": "Longest side of the mirrored video. Lower is less bandwidth and lower latency over Wi-Fi. 0 keeps the phone's native resolution.",
+        "min": 0,
+        "max": 4096,
+        "step": 120,
+        "defaultValue": 1080
+      },
+      {
+        "key": "bitrateMbps",
+        "type": "integer",
+        "label": "Video bitrate (Mbps)",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "defaultValue": 8
+      },
+      {
+        "key": "turnScreenOff",
+        "type": "boolean",
+        "label": "Turn phone screen off while mirroring",
+        "defaultValue": true
+      },
+      {
+        "key": "stayAwake",
+        "type": "boolean",
+        "label": "Keep phone awake while mirroring",
+        "defaultValue": true
+      },
+      {
+        "key": "audio",
+        "type": "boolean",
+        "label": "Forward audio (Android 11+)",
+        "defaultValue": true
+      },
+      {
+        "key": "extraArgs",
+        "type": "string",
+        "label": "Extra scrcpy arguments",
+        "description": "Appended verbatim, split on whitespace. e.g. --video-codec=h265 --no-clipboard-autosync",
+        "defaultValue": ""
+      }
+    ]
+  }
+}
