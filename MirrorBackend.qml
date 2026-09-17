@@ -130,7 +130,9 @@ Item {
       return
     }
     var step = steps[0]
-    actionProc.command = [root.adbPath].concat(step.args)
+    // args may be a function so a later step can use what an earlier one found.
+    var args = typeof step.args === "function" ? step.args() : step.args
+    actionProc.command = [root.adbPath].concat(args)
     actionProc.running = true
   }
 
@@ -234,7 +236,7 @@ Item {
         }
       },
       {
-        args: ["connect", ip + ":" + Model.WIFI_PORT],
+        args: function() { return ["connect", ip + ":" + Model.WIFI_PORT] },
         onDone: function(out, err, code) {
           var v = Model.connectVerdict(out, err, code)
           root.finishSteps(v.ok, v.ok ? "Wi-Fi ready at " + ip + ":" + Model.WIFI_PORT + " — you can unplug the cable" : v.message)
