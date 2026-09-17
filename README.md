@@ -79,9 +79,10 @@ Inside the panel:
 ## IPC
 
 ```sh
-omarchy-shell shell ipc io.github.ayan-de.android-mirror mirror   # mirror first ready phone
-omarchy-shell shell ipc io.github.ayan-de.android-mirror stop
-omarchy-shell shell ipc io.github.ayan-de.android-mirror toggle   # open/close the panel
+omarchy-shell io.github.ayan-de.android-mirror mirror   # mirror first ready phone
+omarchy-shell io.github.ayan-de.android-mirror stop
+omarchy-shell io.github.ayan-de.android-mirror install  # open the package install terminal
+omarchy-shell io.github.ayan-de.android-mirror toggle   # open/close the panel
 ```
 
 Bind `mirror` to a key in `~/.config/hypr/bindings.conf` if you like.

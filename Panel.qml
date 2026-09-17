@@ -84,6 +84,7 @@ Ui.Panel {
       return "ok"
     }
     function stop(): string { backend.stopMirror(); return "ok" }
+    function install(): string { backend.installTools(); return "ok" }
   }
 
   Ui.BarIconButton {
