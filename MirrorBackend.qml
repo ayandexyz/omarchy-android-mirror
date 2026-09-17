@@ -251,6 +251,7 @@ Item {
     if (!device || !device.ready) return
     if (mirrorProc.running) stopMirror()
     mirrorError = ""
+    orientation = -1
     mirroring = device
     mirrorProc.command = [root.scrcpyPath].concat(Model.scrcpyArgs(device.serial, {
       maxSize: setting("maxSize", 1080),
@@ -265,6 +266,42 @@ Item {
     }, device.transport))
     mirrorProc.running = true
   }
+
+  // --- orientation -----------------------------------------------------------
+  // Wayland gives scrcpy no way to resize its own window, so a rotated phone
+  // ends up letterboxed inside a portrait window. Poll the phone while the
+  // mirror runs and let bin/fit-window.sh swap the window's dimensions.
+  property int orientation: -1
+  readonly property string fitScript: String(Qt.resolvedUrl("bin/fit-window.sh")).replace(/^file:\/\//, "")
+
+  Timer {
+    interval: 1500
+    running: root.mirroring !== null && !root.adbMissing
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: if (!orientationProc.running) orientationProc.running = true
+  }
+
+  Process {
+    id: orientationProc
+    command: [root.adbPath, "-s", root.mirroring ? root.mirroring.serial : "", "shell",
+      "dumpsys display 2>/dev/null | grep -m1 -oE 'mCurrentOrientation=[0-9]'"]
+    stdout: StdioCollector { id: orientationOut }
+    onExited: function(exitCode) {
+      console.log("android-mirror: orientation probe exit=" + exitCode + " out=" + String(orientationOut.text || "").trim())
+      if (exitCode !== 0 || !root.mirroring) return
+      var m = String(orientationOut.text || "").match(/mCurrentOrientation=([0-9])/)
+      if (!m) return
+      var o = parseInt(m[1], 10)
+      if (o === root.orientation) return
+      root.orientation = o
+      fitProc.command = [root.fitScript, (o % 2 === 1) ? "landscape" : "portrait"]
+      console.log("android-mirror: fit " + fitProc.command.join(" "))
+      fitProc.running = true
+    }
+  }
+
+  Process { id: fitProc }
 
   function stopMirror() {
     if (mirrorProc.running) mirrorProc.signal(15)
