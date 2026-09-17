@@ -65,6 +65,32 @@ sleep: Always*. Tweak the Wi-Fi values in the widget settings.
 - On vivo/OPPO/Xiaomi, also enable *USB debugging (Security settings)* or
   keyboard/mouse input is blocked.
 
+## Remove
+
+```sh
+omarchy plugin remove io.github.ayan-de.android-mirror
+```
+
+That deletes the plugin and its bar entry. It leaves the packages it
+installed (`scrcpy`, `android-tools`, `android-udev`) in place — remove them
+with `sudo pacman -Rs scrcpy android-tools android-udev` if you no longer want
+them. Nothing else is written: the plugin never edits your Hyprland or shell
+config; the window rule it registers lives only in the running compositor.
+
+## Dependencies
+
+| Dependency | Package (Arch) | Used for |
+|---|---|---|
+| `adb` | `android-tools` | listing phones, Wi-Fi pairing/connect, rotation polling |
+| `scrcpy` | `scrcpy` | the mirror window, keyboard and mouse |
+| udev rules | `android-udev` | USB access without root |
+| `hyprctl`, `jq` | Omarchy base | float/pin the window and follow rotation |
+
+The **Install** button runs `omarchy pkg add scrcpy android-tools android-udev`
+in a terminal, which uses `sudo` (you are asked for your password). No other
+privileged action exists in the plugin. Nothing is downloaded from anywhere
+but the Arch repositories.
+
 ## Keyboard
 
 Inside the panel:
