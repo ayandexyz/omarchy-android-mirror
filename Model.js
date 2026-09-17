@@ -82,15 +82,25 @@ function stateLabel(devices, mirroring) {
   return ready + (ready === 1 ? " phone ready" : " phones ready")
 }
 
-function scrcpyArgs(serial, s) {
+// Over Wi-Fi the phone's uplink is the bottleneck (a 2.4 GHz link manages
+// maybe 10-15 Mbps in practice), so the Wi-Fi profile trades pixels for
+// latency: smaller frame, lower bitrate, capped fps, no audio stream. It also
+// keeps the screen on: with no cable there is no charger, --stay-awake is
+// ignored, and a dark phone dozes and drops off Wi-Fi mid-session.
+function scrcpyArgs(serial, s, transport) {
+  var wifi = transport === "wifi"
   var args = ["-s", serial, "--window-title", "Android Mirror"]
-  var maxSize = Math.round(clamp(s.maxSize, 0, 4096))
+  var maxSize = Math.round(clamp(wifi ? s.wifiMaxSize : s.maxSize, 0, 4096))
   if (maxSize > 0) args.push("--max-size=" + maxSize)
-  var mbps = Math.round(clamp(s.bitrateMbps, 1, 50))
+  var mbps = Math.round(clamp(wifi ? s.wifiBitrateMbps : s.bitrateMbps, 1, 50))
   args.push("--video-bit-rate=" + mbps + "M")
-  if (s.turnScreenOff) args.push("--turn-screen-off")
+  if (wifi) {
+    var fps = Math.round(clamp(s.wifiMaxFps, 0, 120))
+    if (fps > 0) args.push("--max-fps=" + fps)
+  }
+  if (s.turnScreenOff && !wifi) args.push("--turn-screen-off")
   if (s.stayAwake) args.push("--stay-awake")
-  if (!s.audio) args.push("--no-audio")
+  if (!s.audio || wifi) args.push("--no-audio")
   var extra = String(s.extraArgs || "").trim()
   if (extra !== "") args = args.concat(extra.split(/\s+/))
   return args

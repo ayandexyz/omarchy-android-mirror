@@ -37,6 +37,33 @@ omarchy plugin add https://github.com/ayan-de/omarchy-android-mirror.git --enabl
 
 Then add the widget to your bar from the bar settings (category: System).
 
+## Wi-Fi is slower than USB — tuning
+
+Over Wi-Fi the plugin automatically uses a lighter profile (800 px, 2 Mbps,
+30 fps, no audio, screen kept on) because the phone's *uplink* is the
+bottleneck. If it still lags: move both devices to **5 GHz** (biggest win),
+get the phone closer to the router, and on the phone set *Keep Wi-Fi on during
+sleep: Always*. Tweak the Wi-Fi values in the widget settings.
+
+## Floating phone window (Hyprland)
+
+Add to `~/.config/hypr/windows.lua` (and `require_optional.module("hypr.windows")`
+in `hyprland.lua` if it is not there yet):
+
+```lua
+o.window({ class = "^scrcpy$", title = "^Android Mirror$" }, {
+  float = true,
+  pin = true,
+  center = true,
+  size = { "(monitor_h*27/100)", "(monitor_h*3/5)" },
+  tag = "-default-opacity",
+  opacity = "1 1",
+  no_dim = true,
+})
+```
+
+`pin` keeps the phone on every workspace; drag it with Super+LMB.
+
 ## Keyboard
 
 Inside the panel:

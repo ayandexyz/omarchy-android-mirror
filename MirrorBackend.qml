@@ -255,11 +255,14 @@ Item {
     mirrorProc.command = [root.scrcpyPath].concat(Model.scrcpyArgs(device.serial, {
       maxSize: setting("maxSize", 1080),
       bitrateMbps: setting("bitrateMbps", 8),
+      wifiMaxSize: setting("wifiMaxSize", 800),
+      wifiBitrateMbps: setting("wifiBitrateMbps", 2),
+      wifiMaxFps: setting("wifiMaxFps", 30),
       turnScreenOff: setting("turnScreenOff", true),
       stayAwake: setting("stayAwake", true),
       audio: setting("audio", true),
       extraArgs: setting("extraArgs", "")
-    }))
+    }, device.transport))
     mirrorProc.running = true
   }
 

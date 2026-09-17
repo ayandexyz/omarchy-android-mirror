@@ -32,7 +32,10 @@
       "turnScreenOff": true,
       "stayAwake": true,
       "audio": true,
-      "extraArgs": ""
+      "extraArgs": "",
+      "wifiMaxSize": 800,
+      "wifiBitrateMbps": 2,
+      "wifiMaxFps": 30
     },
     "schema": [
       {
@@ -77,6 +80,36 @@
         "max": 50,
         "step": 1,
         "defaultValue": 8
+      },
+      {
+        "key": "wifiMaxSize",
+        "type": "integer",
+        "label": "Wi-Fi: max mirror size (px)",
+        "description": "Used instead of the USB size when the phone is connected over Wi-Fi. Smaller means less lag on a weak link.",
+        "min": 0,
+        "max": 4096,
+        "step": 80,
+        "defaultValue": 800
+      },
+      {
+        "key": "wifiBitrateMbps",
+        "type": "integer",
+        "label": "Wi-Fi: video bitrate (Mbps)",
+        "description": "A 2.4 GHz link realistically carries 10-15 Mbps; leave headroom.",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "defaultValue": 2
+      },
+      {
+        "key": "wifiMaxFps",
+        "type": "integer",
+        "label": "Wi-Fi: max fps",
+        "description": "0 = uncapped. Audio is always off over Wi-Fi and the phone screen stays on so it does not doze.",
+        "min": 0,
+        "max": 120,
+        "step": 5,
+        "defaultValue": 30
       },
       {
         "key": "turnScreenOff",

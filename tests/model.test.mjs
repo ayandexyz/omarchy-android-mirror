@@ -28,6 +28,11 @@ test("scrcpyArgs respects settings", () => {
   assert.deepEqual(a, ["-s", "X", "--window-title", "Android Mirror", "--video-bit-rate=4M", "--stay-awake", "--no-audio", "--video-codec=h265"])
 })
 
+test("scrcpyArgs wifi profile trades quality for latency", () => {
+  const a = M.scrcpyArgs("192.168.1.5:5555", { maxSize: 1080, bitrateMbps: 8, wifiMaxSize: 800, wifiBitrateMbps: 2, wifiMaxFps: 30, turnScreenOff: true, stayAwake: true, audio: true, extraArgs: "" }, "wifi")
+  assert.deepEqual(a, ["-s", "192.168.1.5:5555", "--window-title", "Android Mirror", "--max-size=800", "--video-bit-rate=2M", "--max-fps=30", "--stay-awake", "--no-audio"])
+})
+
 test("parseEndpoint", () => {
   assert.equal(M.parseEndpoint("192.168.1.5", 5555).address, "192.168.1.5:5555")
   assert.equal(M.parseEndpoint("192.168.1.5:37123", 0).address, "192.168.1.5:37123")
