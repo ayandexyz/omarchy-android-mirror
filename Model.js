@@ -124,13 +124,18 @@ function connectVerdict(stdout, stderr, exitCode) {
   return { ok: false, message: fail ? fail[1].trim() : (exitCode === 0 ? s.trim() : "adb connect exited " + exitCode) }
 }
 
-// `adb shell ip route` → "default via 192.168.1.1 dev wlan0 ... src 192.168.1.42"
-// Some ROMs omit `src`, so fall back to `ip -f inet addr show wlan0`.
+// `adb shell ip route` → "192.168.1.0/24 dev wlan0 proto kernel scope link src 192.168.1.42"
+// Mobile data adds an rmnet_data0 line with its own src, so only a wlan0 line
+// counts. Some ROMs omit `src`; fall back to `ip -f inet addr show wlan0`.
 function parseWlanIp(routeText, addrText) {
-  var m = String(routeText || "").match(/\bsrc\s+(\d+\.\d+\.\d+\.\d+)/)
-  if (m) return m[1]
-  m = String(addrText || "").match(/inet\s+(\d+\.\d+\.\d+\.\d+)/)
-  return m ? m[1] : ""
+  var lines = String(routeText || "").split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].indexOf("dev wlan0") === -1) continue
+    var m = lines[i].match(/\bsrc\s+(\d+\.\d+\.\d+\.\d+)/)
+    if (m) return m[1]
+  }
+  var a = String(addrText || "").match(/inet\s+(\d+\.\d+\.\d+\.\d+)/)
+  return a ? a[1] : ""
 }
 
 function elapsed(fromMs, nowMs) {

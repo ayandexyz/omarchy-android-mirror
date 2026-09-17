@@ -207,17 +207,17 @@ Item {
         }
       },
       {
+        // tcpip restarts adbd on the phone; it drops off the bus for a second.
+        args: ["-s", serial, "wait-for-usb-device"],
+        onDone: function() { return true }
+      },
+      {
         args: ["-s", serial, "shell", "ip route; ip -f inet addr show wlan0"],
         onDone: function(out, err, code) {
           ip = Model.parseWlanIp(out, out)
           if (ip === "") { root.finishSteps(false, "Could not read the phone's Wi-Fi address. Is Wi-Fi on?"); return false }
           return true
         }
-      },
-      {
-        // adbd takes a moment to come back on TCP.
-        args: ["-s", serial, "wait-for-device"],
-        onDone: function() { return true }
       },
       {
         args: ["connect", ip + ":" + Model.WIFI_PORT],

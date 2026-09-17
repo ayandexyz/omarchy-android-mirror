@@ -44,6 +44,7 @@ test("verdicts", () => {
 })
 
 test("parseWlanIp prefers route src", () => {
+  assert.equal(M.parseWlanIp("192.0.0.0/27 dev rmnet_data0 proto kernel scope link src 192.0.0.2\n192.168.31.0/24 dev wlan0 proto kernel scope link src 192.168.31.60", ""), "192.168.31.60")
   assert.equal(M.parseWlanIp("default via 192.168.1.1 dev wlan0 proto static src 192.168.1.42", ""), "192.168.1.42")
   assert.equal(M.parseWlanIp("", "    inet 10.0.0.7/24 brd 10.0.0.255 scope global wlan0"), "10.0.0.7")
 })
