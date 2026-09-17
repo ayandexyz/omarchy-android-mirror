@@ -32,7 +32,7 @@ If the panel shows *no USB permission*, add a udev rule or add yourself to the
 ## Install
 
 ```sh
-omarchy plugin add https://github.com/ayan-de/omarchy-android-mirror.git --enable
+omarchy plugin add https://github.com/ayandexyz/omarchy-android-mirror.git --enable
 ```
 
 Then add the widget to your bar from the bar settings (category: System).
