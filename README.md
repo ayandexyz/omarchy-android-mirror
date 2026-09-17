@@ -5,6 +5,10 @@ keyboard and mouse, ~35–70 ms latency, no root, nothing to install on the
 phone. A native Omarchy panel over [`adb`](https://developer.android.com/tools/adb)
 and [`scrcpy`](https://github.com/Genymobile/scrcpy).
 
+<p align="center">
+  <img src="preview.png" alt="The Android Mirror panel next to a mirrored phone floating over the Omarchy desktop" width="720">
+</p>
+
 ## Features
 
 - Bar icon shows whether a phone is ready / mirroring
