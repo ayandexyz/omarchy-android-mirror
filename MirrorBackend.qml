@@ -288,7 +288,6 @@ Item {
       "dumpsys display 2>/dev/null | grep -m1 -oE 'mCurrentOrientation=[0-9]'"]
     stdout: StdioCollector { id: orientationOut }
     onExited: function(exitCode) {
-      console.log("android-mirror: orientation probe exit=" + exitCode + " out=" + String(orientationOut.text || "").trim())
       if (exitCode !== 0 || !root.mirroring) return
       var m = String(orientationOut.text || "").match(/mCurrentOrientation=([0-9])/)
       if (!m) return
@@ -296,7 +295,6 @@ Item {
       if (o === root.orientation) return
       root.orientation = o
       fitProc.command = [root.fitScript, (o % 2 === 1) ? "landscape" : "portrait"]
-      console.log("android-mirror: fit " + fitProc.command.join(" "))
       fitProc.running = true
     }
   }
