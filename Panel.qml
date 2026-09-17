@@ -90,7 +90,7 @@ Ui.Panel {
     id: iconButton
     anchors.fill: parent
     bar: root.bar
-    text: ""
+    text: "󰀲"
     active: backend.mirroring !== null
     tooltipText: "Android · " + root.stateLabel
     onPressed: function(buttonCode) { root.handleBarPress(buttonCode) }
@@ -136,7 +136,7 @@ Ui.Panel {
           detail: backend.mirroring ? "live" : ""
           iconComponent: Component {
             Text {
-              text: ""
+              text: "󰀲"
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.display
@@ -416,13 +416,16 @@ Ui.Panel {
           Text {
             id: footerText
             anchors.left: parent.left
+            anchors.right: footerActions.left
+            anchors.rightMargin: Style.spacing.sm
             anchors.verticalCenter: parent.verticalCenter
+            elide: Text.ElideRight
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
             text: {
               if (backend.lastSuccessAt <= 0) return backend.loading ? "Checking…" : "Not checked yet"
-              return "Updated " + Model.elapsed(backend.lastSuccessAt, root.nowMs) + "  ·  j/k select · enter mirror · w wifi · p pair"
+              return "Updated " + Model.elapsed(backend.lastSuccessAt, root.nowMs) + "  ·  j/k · enter · w · p"
             }
           }
 

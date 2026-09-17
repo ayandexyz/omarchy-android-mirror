@@ -53,7 +53,7 @@ Item {
   // while a tool is reported missing so installing it heals the panel.
   onAdbPathChanged: checkTools()
   onScrcpyPathChanged: checkTools()
-  Component.onCompleted: { checkTools(); refresh() }
+  Component.onCompleted: checkTools()
 
   function checkTools() { toolCheck.running = true }
 
@@ -65,6 +65,8 @@ Item {
         var parts = String(text).trim().split(" ")
         root.adbMissing = parts[0] !== "0"
         root.scrcpyMissing = parts[1] !== "0"
+        if (root.adbMissing) root.loading = false
+        else root.refresh()
       }
     }
   }
@@ -72,7 +74,8 @@ Item {
   // --- device list ------------------------------------------------------------
   function refresh() {
     if (devicesProc.running) return
-    if (adbMissing) checkTools()
+    // Nothing to poll without adb; re-check so installing it heals the panel.
+    if (adbMissing) { checkTools(); return }
     loading = true
     devicesProc.running = true
   }
@@ -97,7 +100,7 @@ Item {
 
   Timer {
     interval: root.refreshIntervalSec * 1000
-    running: !root.toolsMissing
+    running: !root.adbMissing
     repeat: true
     onTriggered: root.refresh()
   }
