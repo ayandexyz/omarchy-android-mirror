@@ -160,9 +160,19 @@ Ui.Panel {
             font.pixelSize: Style.font.bodySmall
             font.weight: Font.Medium
           }
+          Ui.Button {
+            text: backend.installLaunched ? "Install again" : "Install"
+            iconText: "󰏔"
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            tooltipText: "Opens a terminal and asks for your password"
+            onClicked: backend.installTools()
+          }
+
           Text {
             width: parent.width
-            text: "sudo pacman -S scrcpy android-tools\nOr point 'adb path' / 'scrcpy path' in the widget settings at your own binaries."
+            text: "omarchy pkg add scrcpy android-tools android-udev\nOr point 'adb path' / 'scrcpy path' in the widget settings at your own binaries."
             color: root.dim
             wrapMode: Text.WordWrap
             font.family: root.fontFamily

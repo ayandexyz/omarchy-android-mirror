@@ -6,6 +6,7 @@
 
 var DEFAULT_ADB = "/usr/bin/adb"
 var DEFAULT_SCRCPY = "/usr/bin/scrcpy"
+var SDK_ADB = "~/Android/Sdk/platform-tools/adb"
 var WIFI_PORT = 5555
 
 function clamp(value, lo, hi) {

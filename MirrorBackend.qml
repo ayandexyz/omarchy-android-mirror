@@ -57,18 +57,51 @@ Item {
 
   function checkTools() { toolCheck.running = true }
 
+  // The adb actually used: the configured one, else /usr/bin/adb, else the
+  // Android SDK's platform-tools copy (Android Studio users have that one).
+  property string resolvedAdb: ""
+
   Process {
     id: toolCheck
-    command: ["/usr/bin/sh", "-c", "test -x \"$1\"; a=$?; test -x \"$2\"; s=$?; echo \"$a $s\"", "_", root.adbPath, root.scrcpyPath]
+    command: ["/usr/bin/sh", "-c",
+      "adb=''; for c in \"$1\" \"$3\"; do [ -n \"$c\" ] && [ -x \"$c\" ] && { adb=$c; break; }; done; " +
+      "test -x \"$2\"; s=$?; printf '%s\\t%s\\n' \"$adb\" \"$s\"",
+      "_", root.adbPath, root.scrcpyPath, Model.SDK_ADB.replace("~", Quickshell.env("HOME"))]
     stdout: StdioCollector {
       onStreamFinished: {
-        var parts = String(text).trim().split(" ")
-        root.adbMissing = parts[0] !== "0"
+        var parts = String(text).trim().split("\t")
+        root.resolvedAdb = parts[0] || ""
+        root.adbMissing = root.resolvedAdb === ""
         root.scrcpyMissing = parts[1] !== "0"
         if (root.adbMissing) root.loading = false
         else root.refresh()
       }
     }
+  }
+
+  // While something is missing, re-check every few seconds so the panel
+  // heals itself as soon as the install terminal finishes.
+  Timer {
+    interval: 3000
+    running: root.toolsMissing
+    repeat: true
+    onTriggered: root.checkTools()
+  }
+
+  // --- install -------------------------------------------------------------
+  property bool installLaunched: false
+
+  function installTools() {
+    if (installProc.running) return
+    installLaunched = true
+    installProc.running = true
+  }
+
+  Process {
+    id: installProc
+    command: ["/usr/bin/omarchy-launch-floating-terminal-with-presentation",
+      "omarchy pkg add scrcpy android-tools android-udev"]
+    onExited: root.checkTools()
   }
 
   // --- device list ------------------------------------------------------------
@@ -82,7 +115,7 @@ Item {
 
   Process {
     id: devicesProc
-    command: [root.adbPath, "devices", "-l"]
+    command: [root.resolvedAdb, "devices", "-l"]
     stdout: StdioCollector { id: devicesOut }
     stderr: StdioCollector { id: devicesErr }
     onExited: function(exitCode) {
@@ -132,7 +165,7 @@ Item {
     var step = steps[0]
     // args may be a function so a later step can use what an earlier one found.
     var args = typeof step.args === "function" ? step.args() : step.args
-    actionProc.command = [root.adbPath].concat(args)
+    actionProc.command = [root.resolvedAdb].concat(args)
     actionProc.running = true
   }
 
@@ -247,9 +280,14 @@ Item {
   }
 
   // --- mirroring ----------------------------------------------------------------
+  readonly property string ruleScript: String(Qt.resolvedUrl("bin/hypr-window-rule.sh")).replace(/^file:\/\//, "")
+  Process { id: ruleProc; command: [root.ruleScript] }
+
   function mirror(device) {
     if (!device || !device.ready) return
     if (mirrorProc.running) stopMirror()
+    // Float + pin the window without the user editing Hyprland config.
+    ruleProc.running = true
     mirrorError = ""
     orientation = -1
     mirroring = device
@@ -284,7 +322,7 @@ Item {
 
   Process {
     id: orientationProc
-    command: [root.adbPath, "-s", root.mirroring ? root.mirroring.serial : "", "shell",
+    command: [root.resolvedAdb, "-s", root.mirroring ? root.mirroring.serial : "", "shell",
       "dumpsys display 2>/dev/null | grep -m1 -oE 'mCurrentOrientation=[0-9]'"]
     stdout: StdioCollector { id: orientationOut }
     onExited: function(exitCode) {

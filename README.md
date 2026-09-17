@@ -10,34 +10,46 @@ and [`scrcpy`](https://github.com/Genymobile/scrcpy).
 - Bar icon shows whether a phone is ready / mirroring
 - Left click: panel with every connected phone and one-click **Mirror**
 - Right click the icon: mirror the first ready phone (or stop the running mirror)
+- **Install** button for the two packages it needs; finds the Android SDK's adb by itself
 - **Enable Wi-Fi** on a USB-connected phone in one click, then unplug the cable
 - **Pair** an Android 11+ phone over Wi-Fi with the pairing code — no cable, ever
 - Connect to a remembered `ip:port`
 - Turn the phone screen off while mirroring, keep it awake, forward audio (Android 11+)
+- Floating, pinned, rotation-following window — no Hyprland config to edit
 - All scrcpy knobs (max size, bitrate, extra args) in the widget settings
 
-## Requirements
+## Install — three steps
 
-```sh
-sudo pacman -S scrcpy android-tools
-```
+1. **Add the plugin** (it lands in your bar automatically):
 
-On the phone: Settings → Developer options → **USB debugging** (and
-**Wireless debugging** for cable-free pairing on Android 11+). Accept the
-"Allow USB debugging?" prompt the first time you plug in.
+   ```sh
+   omarchy plugin add https://github.com/ayandexyz/omarchy-android-mirror.git --enable
+   ```
 
-If the panel shows *no USB permission*, add a udev rule or add yourself to the
-`adbusers` group (`sudo usermod -aG adbusers $USER`, then re-login).
+2. **Click the Android icon → Install.** A terminal opens and runs
+   `omarchy pkg add scrcpy android-tools android-udev` (asks for your password).
+   Skip this if you already have adb + scrcpy; the plugin also finds the
+   Android SDK's `~/Android/Sdk/platform-tools/adb` on its own.
 
-## Install
+3. **On the phone**, turn on *Settings → Developer options → USB debugging*
+   (tap *Build number* 7 times under *About phone* if Developer options is
+   hidden), plug in with USB, and tap **Allow** on the prompt.
 
-```sh
-omarchy plugin add https://github.com/ayandexyz/omarchy-android-mirror.git --enable
-```
+Click **Mirror**. Nothing else to configure: the mirror window floats, stays
+pinned across workspaces, and follows the phone's rotation — the plugin
+registers the Hyprland window rule itself.
 
-Then add the widget to your bar from the bar settings (category: System).
+### Going wireless
 
-## Wi-Fi is slower than USB — tuning
+With the phone still on USB, press the **Wi-Fi** button on its row (or `w`).
+Wait for "Wi-Fi ready … you can unplug the cable", unplug, and click Mirror
+on the Wi-Fi row. This lasts until the phone reboots.
+
+Cable-free from the start (Android 11+): *Developer options → Wireless
+debugging → Pair device with pairing code*, then **Pair a new phone** in the
+panel and type the address and code shown.
+
+### Wi-Fi is slower than USB — tuning
 
 Over Wi-Fi the plugin automatically uses a lighter profile (800 px, 2 Mbps,
 30 fps, no audio, screen kept on) because the phone's *uplink* is the
@@ -45,24 +57,13 @@ bottleneck. If it still lags: move both devices to **5 GHz** (biggest win),
 get the phone closer to the router, and on the phone set *Keep Wi-Fi on during
 sleep: Always*. Tweak the Wi-Fi values in the widget settings.
 
-## Floating phone window (Hyprland)
+### Troubleshooting
 
-Add to `~/.config/hypr/windows.lua` (and `require_optional.module("hypr.windows")`
-in `hyprland.lua` if it is not there yet):
-
-```lua
-o.window({ class = "^scrcpy$", title = "^Android Mirror$" }, {
-  float = true,
-  pin = true,
-  center = true,
-  size = { "(monitor_h*27/100)", "(monitor_h*3/5)" },
-  tag = "-default-opacity",
-  opacity = "1 1",
-  no_dim = true,
-})
-```
-
-`pin` keeps the phone on every workspace; drag it with Super+LMB.
+- *tap Allow on the phone* → the USB debugging prompt is waiting on the phone.
+- *udev: no USB permission* → `sudo usermod -aG adbusers $USER`, then log out and in.
+- Phone not listed at all → the USB mode is "charge only"; switch to *File transfer*.
+- On vivo/OPPO/Xiaomi, also enable *USB debugging (Security settings)* or
+  keyboard/mouse input is blocked.
 
 ## Keyboard
 
@@ -85,16 +86,6 @@ omarchy-shell shell ipc io.github.ayan-de.android-mirror toggle   # open/close t
 
 Bind `mirror` to a key in `~/.config/hypr/bindings.conf` if you like.
 
-## How Wi-Fi works
-
-- **Android 11+, no cable:** phone shows an `ip:port` and a 6-digit code under
-  Wireless debugging → *Pair device with pairing code*. Type both into the
-  panel → Pair. Then Connect to the address shown at the top of the Wireless
-  debugging screen (different port from the pairing one).
-- **Any Android, one cable plug:** with the phone on USB press the Wi-Fi
-  button on its row. The plugin runs `adb tcpip 5555`, reads the phone's
-  `wlan0` address and connects to it. Lasts until the phone reboots.
-
 ## Layout
 
 ```
@@ -102,6 +93,7 @@ manifest.json      plugin identity + settings schema
 Panel.qml          bar icon + panel UI (the `barWidget` entry point)
 MirrorBackend.qml  adb / scrcpy processes and state
 Model.js           pure parsing + argument building (tested)
+bin/               hypr-window-rule.sh (float/pin rule), fit-window.sh (rotation)
 tests/             node --test tests/
 ```
 
