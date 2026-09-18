@@ -295,7 +295,10 @@ Item {
     orientation = -1
     mirroring = device
     mirrorProc.command = [root.scrcpyPath].concat(Model.scrcpyArgs(device.serial, {
-      maxSize: setting("maxSize", 1080),
+      // These fallbacks must match barWidget.defaults in manifest.json: the panel
+      // passes only the user's own overrides here, so a stale number in this
+      // object silently wins over the manifest default.
+      maxSize: setting("maxSize", 0),
       bitrateMbps: setting("bitrateMbps", 8),
       wifiMaxSize: setting("wifiMaxSize", 800),
       wifiBitrateMbps: setting("wifiBitrateMbps", 2),

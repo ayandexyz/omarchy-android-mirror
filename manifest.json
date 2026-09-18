@@ -27,7 +27,7 @@
       "refreshIntervalSec": 10,
       "adbPath": "",
       "scrcpyPath": "",
-      "maxSize": 1080,
+      "maxSize": 0,
       "bitrateMbps": 8,
       "turnScreenOff": true,
       "stayAwake": true,
@@ -66,11 +66,11 @@
         "key": "maxSize",
         "type": "integer",
         "label": "Max mirror size (px)",
-        "description": "Longest side of the mirrored video. Lower is less bandwidth and lower latency over Wi-Fi. 0 keeps the phone's native resolution.",
+        "description": "Longest side of the mirrored video. 0 keeps the phone's native resolution: scrcpy then renders the phone's own pixels straight into the window (one GPU resample, sharpest text, least CPU). Any other value makes scrcpy downscale the frame first and the window scale it again, which is what makes mirrored text look soft. Lower values are less bandwidth over Wi-Fi.",
         "min": 0,
         "max": 4096,
         "step": 120,
-        "defaultValue": 1080
+        "defaultValue": 0
       },
       {
         "key": "bitrateMbps",
