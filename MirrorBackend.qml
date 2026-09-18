@@ -308,6 +308,10 @@ Item {
       audio: setting("audio", true),
       extraArgs: setting("extraArgs", "")
     }, device.transport))
+    // The panel passes only the user's own overrides, so this line is the only
+    // honest record of which flags actually reached scrcpy:
+    //   journalctl --user -b | grep android-mirror
+    console.log("[android-mirror] " + mirrorProc.command.join(" "))
     mirrorProc.running = true
   }
 
@@ -346,6 +350,17 @@ Item {
   }
 
   Process { id: fitProc }
+
+  // Re-frame the live window around the phone screen on demand. A manual resize
+  // is fine, but it breaks the phone's aspect ratio and scrcpy fills the spare
+  // space with bands, so the panel offers one call to snap it back.
+  function refitWindow() {
+    if (!mirroring) return false
+    fitProc.command = [root.fitScript, mirroring.serial,
+      (orientation % 2 === 1) ? "landscape" : "portrait", root.resolvedAdb]
+    fitProc.running = true
+    return true
+  }
 
   function stopMirror() {
     if (mirrorProc.running) mirrorProc.signal(15)

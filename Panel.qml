@@ -84,6 +84,8 @@ Ui.Panel {
       return "ok"
     }
     function stop(): string { backend.stopMirror(); return "ok" }
+    // omarchy-shell shell ipc io.github.ayan-de.android-mirror fit
+    function fit(): string { return backend.refitWindow() ? "ok" : "no device" }
     function install(): string { backend.installTools(); return "ok" }
   }
 
@@ -446,6 +448,16 @@ Ui.Panel {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.spacing.xs
 
+            // A manual resize keeps its size but breaks the phone's aspect ratio,
+            // which scrcpy fills with bands: one click puts the frame back.
+            Ui.PanelActionButton {
+              visible: backend.mirroring !== null
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              iconText: "󰊓"
+              tooltipText: "Fit window to the phone screen"
+              onClicked: backend.refitWindow()
+            }
             Ui.PanelActionButton {
               visible: backend.mirroring !== null
               foreground: root.foreground
