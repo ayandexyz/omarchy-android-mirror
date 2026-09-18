@@ -6,7 +6,8 @@ import qs.Commons
 import qs.Ui as Ui
 import "Model.js" as Model
 
-// Bar icon + panel for mirroring an Android phone with scrcpy.
+// Bar icon + panel for mirroring an Android phone with scrcpy, or using its
+// camera as a webcam through v4l2loopback.
 //
 // Left click: open the panel. Right click: mirror the first ready phone (or
 // stop the running mirror). Middle click: refresh the device list.
@@ -24,7 +25,8 @@ Ui.Panel {
   readonly property var devices: backend.devices
   readonly property var readyDevices: devices.filter(function(d) { return d.ready })
   readonly property var usbDevices: readyDevices.filter(function(d) { return d.transport === "usb" })
-  readonly property string stateLabel: Model.stateLabel(devices, backend.mirroring)
+  readonly property string stateLabel: Model.stateLabel(devices, backend.mirroring, backend.webcam)
+  readonly property bool live: backend.mirroring !== null || backend.webcam !== null
 
   property int cursor: 0
   property bool showPairing: false
@@ -42,6 +44,12 @@ Ui.Panel {
     if (backend.mirroring) { backend.stopMirror(); return }
     var d = readyDevices[Math.max(0, Math.min(cursor, readyDevices.length - 1))]
     if (d) backend.mirror(d)
+  }
+
+  function webcamSelected() {
+    if (backend.webcam) { backend.stopWebcam(); return }
+    var d = readyDevices[Math.max(0, Math.min(cursor, readyDevices.length - 1))]
+    if (d) backend.startWebcam(d)
   }
 
   function handleBarPress(buttonCode) {
@@ -85,6 +93,17 @@ Ui.Panel {
     }
     function stop(): string { backend.stopMirror(); return "ok" }
     function install(): string { backend.installTools(); return "ok" }
+    // omarchy-shell shell ipc io.github.ayan-de.android-mirror webcam
+    function webcam(): string {
+      root.cursor = 0
+      if (backend.webcam) return "already live"
+      if (root.readyDevices.length === 0) return "no device"
+      root.webcamSelected()
+      return "ok"
+    }
+    function webcamStop(): string { backend.stopWebcam(); return "ok" }
+    function flip(): string { backend.flipCamera(); return backend.cameraFacing }
+    function setup(): string { backend.setupWebcam(); return "ok" }
   }
 
   Ui.BarIconButton {
@@ -92,7 +111,7 @@ Ui.Panel {
     anchors.fill: parent
     bar: root.bar
     text: "󰀲"
-    active: backend.mirroring !== null
+    active: root.live
     tooltipText: "Android · " + root.stateLabel
     onPressed: function(buttonCode) { root.handleBarPress(buttonCode) }
   }
@@ -121,6 +140,8 @@ Ui.Panel {
         if (text === "r") root.refreshNow()
         else if (text === "p") root.showPairing = !root.showPairing
         else if (text === "w" && root.usbDevices.length > 0) backend.enableWifi(root.usbDevices[0].serial)
+        else if (text === "c") root.webcamSelected()
+        else if (text === "f") backend.flipCamera()
       }
 
       Column {
@@ -134,7 +155,7 @@ Ui.Panel {
           fontFamily: root.fontFamily
           title: "Android Mirror"
           meta: root.stateLabel
-          detail: backend.mirroring ? "live" : ""
+          detail: backend.mirroring && backend.webcam ? "mirror + webcam live" : backend.mirroring ? "live" : backend.webcam ? "webcam live" : ""
           iconComponent: Component {
             Text {
               text: "󰀲"
@@ -213,6 +234,7 @@ Ui.Panel {
               required property var modelData
               required property int index
               readonly property bool isMirroring: backend.mirroring && backend.mirroring.serial === modelData.serial
+              readonly property bool isWebcam: backend.webcam && backend.webcam.serial === modelData.serial
               readonly property int readyIndex: root.readyDevices.findIndex(function(d) { return d.serial === modelData.serial })
               readonly property bool selected: modelData.ready && readyIndex === root.cursor
               width: parent ? parent.width : 0
@@ -273,6 +295,15 @@ Ui.Panel {
                   enabled: !backend.actionBusy
                   onClicked: backend.disconnect(row.modelData.serial)
                 }
+                Ui.PanelActionButton {
+                  visible: row.modelData.ready
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  iconText: row.isWebcam ? "󰖠" : "󰄀"
+                  tooltipText: row.isWebcam ? "Stop the webcam" : "Use this phone's camera as a webcam (Android 12+)"
+                  enabled: !backend.actionBusy
+                  onClicked: row.isWebcam ? backend.stopWebcam() : backend.startWebcam(row.modelData)
+                }
                 Ui.Button {
                   visible: row.modelData.ready
                   text: row.isMirroring ? "Stop" : "Mirror"
@@ -292,6 +323,78 @@ Ui.Panel {
                 onDoubleClicked: backend.mirror(row.modelData)
               }
             }
+          }
+        }
+
+        // Webcam: the loopback node apps see as a camera, and its controls.
+        Column {
+          width: parent.width
+          spacing: Style.spacing.xs
+          visible: !backend.toolsMissing
+
+          Ui.PanelSectionHeader {
+            width: parent.width
+            text: "Webcam"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+          }
+
+          Text {
+            width: parent.width
+            text: {
+              if (!backend.loopbackReady) return backend.loopbackMessage
+              if (backend.webcam) return "Live as \"" + Model.WEBCAM_LABEL + "\" — pick it as the camera in Meet, Teams or Zoom."
+              return "Pick \"" + Model.WEBCAM_LABEL + "\" in the app, then press 󰄀 on a phone (Android 12+)."
+            }
+            color: backend.loopbackReady ? root.dim : root.urgent
+            wrapMode: Text.WordWrap
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+
+          Row {
+            spacing: Style.spacing.sm
+
+            Ui.Button {
+              visible: !backend.loopbackReady
+              text: backend.setupLaunched ? "Set up again" : "Set up"
+              iconText: "󰏔"
+              bordered: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              tooltipText: "Opens a terminal and asks for your password: installs v4l2loopback-dkms and kernel headers, registers " + backend.webcamDevice
+              onClicked: backend.setupWebcam()
+            }
+            Ui.Button {
+              visible: backend.loopbackReady
+              text: backend.cameraFacing === "back" ? "Back camera" : "Front camera"
+              iconText: "󰑧"
+              bordered: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              tooltipText: "Switch between the front and back camera (f)"
+              enabled: !backend.actionBusy
+              onClicked: backend.flipCamera()
+            }
+            Ui.Button {
+              visible: backend.webcam !== null
+              text: "Stop webcam"
+              iconText: "󰓛"
+              bordered: true
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              onClicked: backend.stopWebcam()
+            }
+          }
+
+          Text {
+            width: parent.width
+            visible: !backend.loopbackReady
+            text: "One-time: v4l2loopback-dkms + kernel headers, and a modprobe.d entry so " + backend.webcamDevice + " exists at every boot. Nothing else is written."
+            color: root.dim
+            wrapMode: Text.WordWrap
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
           }
         }
 
@@ -406,10 +509,11 @@ Ui.Panel {
             if (backend.actionBusy) return "Running adb " + backend.actionName + "…"
             if (backend.actionMessage !== "") return backend.actionMessage
             if (backend.mirrorError !== "") return backend.mirrorError
+            if (backend.webcamError !== "") return backend.webcamError
             if (backend.fetchError !== "") return backend.fetchError
             return ""
           }
-          color: backend.actionBusy ? root.foreground : ((backend.actionOk && backend.mirrorError === "" && backend.fetchError === "") ? Color.accent : root.urgent)
+          color: backend.actionBusy ? root.foreground : ((backend.actionOk && backend.mirrorError === "" && backend.webcamError === "" && backend.fetchError === "") ? Color.accent : root.urgent)
           wrapMode: Text.WordWrap
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
@@ -436,7 +540,7 @@ Ui.Panel {
             font.pixelSize: Style.font.caption
             text: {
               if (backend.lastSuccessAt <= 0) return backend.loading ? "Checking…" : "Not checked yet"
-              return "Updated " + Model.elapsed(backend.lastSuccessAt, root.nowMs) + "  ·  j/k · enter · w · p"
+              return "Updated " + Model.elapsed(backend.lastSuccessAt, root.nowMs) + "  ·  j/k · enter · c · f · w · p"
             }
           }
 
@@ -446,6 +550,14 @@ Ui.Panel {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.spacing.xs
 
+            Ui.PanelActionButton {
+              visible: backend.webcam !== null
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              iconText: "󰖠"
+              tooltipText: "Stop the webcam"
+              onClicked: backend.stopWebcam()
+            }
             Ui.PanelActionButton {
               visible: backend.mirroring !== null
               foreground: root.foreground

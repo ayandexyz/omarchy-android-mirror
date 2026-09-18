@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.ayan-de.android-mirror",
   "name": "Android Mirror",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Ayan De",
   "license": "MIT",
-  "description": "Mirror and control your Android phone from the Omarchy bar: USB or Wi-Fi, keyboard and mouse, low latency, no root. A native panel over adb + scrcpy.",
+  "description": "Mirror and control your Android phone from the Omarchy bar, or use its camera as a webcam in Meet, Teams and Zoom. USB or Wi-Fi, keyboard and mouse, low latency, no root. A native panel over adb + scrcpy.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,12 +14,14 @@
   },
   "barWidget": {
     "displayName": "Android Mirror",
-    "description": "One bar icon and one panel: see connected phones, pair over Wi-Fi once, then mirror with keyboard and mouse in a click.",
+    "description": "One bar icon and one panel: see connected phones, pair over Wi-Fi once, then mirror with keyboard and mouse or turn the phone camera into a webcam in a click.",
     "category": "System",
     "aliases": [
       "android",
       "scrcpy",
-      "phone"
+      "phone",
+      "webcam",
+      "camera"
     ],
     "defaultSection": "right",
     "allowMultiple": false,
@@ -35,7 +37,13 @@
       "extraArgs": "",
       "wifiMaxSize": 800,
       "wifiBitrateMbps": 2,
-      "wifiMaxFps": 30
+      "wifiMaxFps": 30,
+      "cameraFacing": "back",
+      "cameraSize": "1280x720",
+      "cameraFps": 30,
+      "cameraMirror": false,
+      "cameraTorch": false,
+      "webcamDevice": ""
     },
     "schema": [
       {
@@ -134,6 +142,58 @@
         "type": "string",
         "label": "Extra scrcpy arguments",
         "description": "Appended verbatim, split on whitespace. e.g. --video-codec=h265 --no-clipboard-autosync",
+        "defaultValue": ""
+      },
+      {
+        "key": "cameraFacing",
+        "type": "enum",
+        "label": "Webcam: camera",
+        "description": "Which phone camera to use as the webcam. The panel's flip button overrides this until the shell restarts.",
+        "options": [
+          "back",
+          "front"
+        ],
+        "defaultValue": "back"
+      },
+      {
+        "key": "cameraSize",
+        "type": "enum",
+        "label": "Webcam: capture size",
+        "description": "1280x720 is what Meet and Teams send anyway and is easy on Wi-Fi. The size is fixed while the camera runs; change it before starting.",
+        "options": [
+          "1280x720",
+          "1920x1080",
+          "640x480"
+        ],
+        "defaultValue": "1280x720"
+      },
+      {
+        "key": "cameraFps",
+        "type": "integer",
+        "label": "Webcam: fps",
+        "min": 5,
+        "max": 60,
+        "step": 5,
+        "defaultValue": 30
+      },
+      {
+        "key": "cameraMirror",
+        "type": "boolean",
+        "label": "Webcam: mirror horizontally",
+        "description": "Flip the image like a selfie preview. Most conferencing apps already mirror your own preview but send the unmirrored image; leave this off unless text looks wrong to others.",
+        "defaultValue": false
+      },
+      {
+        "key": "cameraTorch",
+        "type": "boolean",
+        "label": "Webcam: torch on (back camera)",
+        "defaultValue": false
+      },
+      {
+        "key": "webcamDevice",
+        "type": "string",
+        "label": "Webcam: device node",
+        "description": "Optional. The v4l2loopback node to write to; empty means /dev/video42, which Set up creates as \"Android Mirror Camera\". Point this elsewhere if you already have a loopback device.",
         "defaultValue": ""
       }
     ]

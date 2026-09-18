@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs"
 
 const src = readFileSync(new URL("../Model.js", import.meta.url), "utf8").replace(".pragma library", "")
 const M = new Function(src + `
-  return { parseDevices, scrcpyArgs, parseEndpoint, pairVerdict, connectVerdict, parseWlanIp, stateLabel }`)()
+  return { parseDevices, scrcpyArgs, webcamArgs, parseLoopback, parseEndpoint, pairVerdict, connectVerdict, parseWlanIp, stateLabel, WEBCAM_DEVICE, WEBCAM_LABEL }`)()
 
 test("parseDevices handles usb, wifi, unauthorized, no permissions", () => {
   const out = M.parseDevices(`List of devices attached
@@ -62,4 +62,29 @@ test("stateLabel", () => {
   assert.equal(M.stateLabel([], null), "No phone connected")
   assert.equal(M.stateLabel([{ ready: true }], null), "1 phone ready")
   assert.equal(M.stateLabel([], { model: "Pixel 8" }), "Mirroring Pixel 8")
+  assert.equal(M.stateLabel([], null, { model: "Pixel 8" }), "Webcam Pixel 8")
+  assert.equal(M.stateLabel([], { model: "Pixel 8" }, { model: "Pixel 8" }), "Mirroring + webcam Pixel 8")
+})
+
+test("webcamArgs: no window, fixed size, loopback sink", () => {
+  const a = M.webcamArgs("X", { cameraFacing: "front", cameraSize: "1280x720", cameraFps: 30, bitrateMbps: 8, wifiBitrateMbps: 2 }, "usb")
+  assert.deepEqual(a, ["-s", "X", "--video-source=camera", "--no-window", "--no-audio",
+    "--camera-facing=front", "--camera-size=1280x720", "--camera-fps=30", "--video-bit-rate=8M", "--v4l2-sink=" + M.WEBCAM_DEVICE])
+})
+
+test("webcamArgs: wifi bitrate, mirror, torch only on back, custom device, bad size falls back", () => {
+  const a = M.webcamArgs("X", { cameraFacing: "back", cameraSize: "huge", cameraFps: 500, cameraMirror: true, cameraTorch: true, bitrateMbps: 8, wifiBitrateMbps: 2, webcamDevice: "/dev/video9" }, "wifi")
+  assert.deepEqual(a, ["-s", "X", "--video-source=camera", "--no-window", "--no-audio",
+    "--camera-facing=back", "--camera-size=1280x720", "--camera-fps=120", "--video-bit-rate=2M",
+    "--capture-orientation=@flip0", "--camera-torch", "--v4l2-sink=/dev/video9"])
+  const front = M.webcamArgs("X", { cameraFacing: "front", cameraTorch: true, cameraFps: 30, bitrateMbps: 8 })
+  assert.ok(!front.includes("--camera-torch"))
+})
+
+test("parseLoopback", () => {
+  assert.equal(M.parseLoopback("ready\t" + M.WEBCAM_LABEL + "\n", M.WEBCAM_LABEL, "/dev/video42").state, "ready")
+  assert.equal(M.parseLoopback("ready\tOmarchy Phone Camera", M.WEBCAM_LABEL, "/dev/video42").state, "foreign")
+  assert.equal(M.parseLoopback("notloaded", M.WEBCAM_LABEL, "/dev/video42").state, "notloaded")
+  assert.equal(M.parseLoopback("missing", M.WEBCAM_LABEL, "/dev/video42").state, "missing")
+  assert.equal(M.parseLoopback("", M.WEBCAM_LABEL, "/dev/video42").state, "missing")
 })

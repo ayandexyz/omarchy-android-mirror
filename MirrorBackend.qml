@@ -7,8 +7,9 @@ import "Model.js" as Model
 
 // Process boundary for the panel. Nothing here does anything you could not
 // type yourself: `adb devices -l` to list, `adb tcpip` / `adb connect` /
-// `adb pair` for Wi-Fi, and one long-lived `scrcpy -s <serial>` for the
-// mirror window. Binaries run by absolute path (default or configured), never
+// `adb pair` for Wi-Fi, one long-lived `scrcpy -s <serial>` for the mirror
+// window and another with `--video-source=camera --v4l2-sink` for the
+// webcam. Binaries run by absolute path (default or configured), never
 // by PATH lookup, because a shell plugin runs unsandboxed as the user.
 Item {
   id: root
@@ -37,6 +38,18 @@ Item {
   property var mirroring: null
   property string mirrorError: ""
 
+  // The device whose camera is on the v4l2loopback node, or null.
+  property var webcam: null
+  property string webcamError: ""
+  // ready | foreign | notloaded | missing — see Model.parseLoopback.
+  property string loopbackState: "missing"
+  property string loopbackMessage: ""
+  readonly property bool loopbackReady: loopbackState === "ready"
+  readonly property string webcamDevice: String(setting("webcamDevice", "")).trim() || Model.WEBCAM_DEVICE
+  // The panel's front/back toggle overrides the setting for this session.
+  property string facingOverride: ""
+  readonly property string cameraFacing: facingOverride || (setting("cameraFacing", "back") === "back" ? "back" : "front")
+
   readonly property int refreshIntervalSec: Math.round(Model.clamp(setting("refreshIntervalSec", 10), 3, 300))
   readonly property string adbPath: String(setting("adbPath", "")).trim() || Model.DEFAULT_ADB
   readonly property string scrcpyPath: String(setting("scrcpyPath", "")).trim() || Model.DEFAULT_SCRCPY
@@ -53,7 +66,7 @@ Item {
   // while a tool is reported missing so installing it heals the panel.
   onAdbPathChanged: checkTools()
   onScrcpyPathChanged: checkTools()
-  Component.onCompleted: checkTools()
+  Component.onCompleted: { checkTools(); checkLoopback() }
 
   function checkTools() { toolCheck.running = true }
 
@@ -102,6 +115,54 @@ Item {
     command: ["/usr/bin/omarchy-launch-floating-terminal-with-presentation",
       "omarchy pkg add scrcpy android-tools android-udev"]
     onExited: root.checkTools()
+  }
+
+  // --- virtual camera ---------------------------------------------------------
+  // The loopback node is what apps pick as the camera; it must exist before
+  // scrcpy can write to it. Probed on start, whenever the configured node
+  // changes, and every few seconds while it is not ready so finishing the
+  // setup terminal heals the panel.
+  onWebcamDeviceChanged: checkLoopback()
+
+  function checkLoopback() { if (!loopbackProbe.running) loopbackProbe.running = true }
+
+  Process {
+    id: loopbackProbe
+    command: ["/usr/bin/sh", "-c",
+      "d=$1; n=/sys/class/video4linux/${d#/dev/}/name; " +
+      "if [ -e \"$d\" ] && [ -r \"$n\" ]; then printf 'ready\\t%s\\n' \"$(cat \"$n\")\"; " +
+      "elif pacman -Q v4l2loopback-dkms >/dev/null 2>&1; then echo notloaded; else echo missing; fi",
+      "_", root.webcamDevice]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var v = Model.parseLoopback(text, Model.WEBCAM_LABEL, root.webcamDevice)
+        root.loopbackState = v.state
+        root.loopbackMessage = v.message
+      }
+    }
+  }
+
+  Timer {
+    interval: 3000
+    running: !root.loopbackReady
+    repeat: true
+    onTriggered: root.checkLoopback()
+  }
+
+  property bool setupLaunched: false
+  readonly property string setupScript: String(Qt.resolvedUrl("bin/setup-webcam.sh")).replace(/^file:\/\//, "")
+
+  function setupWebcam() {
+    if (setupProc.running) return
+    setupLaunched = true
+    setupProc.running = true
+  }
+
+  Process {
+    id: setupProc
+    command: ["/usr/bin/omarchy-launch-floating-terminal-with-presentation",
+      root.setupScript, root.webcamDevice, Model.WEBCAM_LABEL]
+    onExited: root.checkLoopback()
   }
 
   // --- device list ------------------------------------------------------------
@@ -354,6 +415,81 @@ Item {
 
   function stopMirror() {
     if (mirrorProc.running) mirrorProc.signal(15)
+  }
+
+  // --- webcam -------------------------------------------------------------------
+  // Same phone can mirror and be a webcam at once: scrcpy runs one server per
+  // connection. The SDK check first is because scrcpy's own error for an old
+  // phone is a stack trace, not a sentence.
+  function startWebcam(device) {
+    if (!device || !device.ready) return
+    if (!loopbackReady) { webcamError = loopbackMessage; return }
+    webcamError = ""
+    runSteps("camera check", [{
+      args: ["-s", device.serial, "shell", "getprop ro.build.version.sdk"],
+      onDone: function(out, err, code) {
+        var sdk = parseInt(String(out || "").trim(), 10)
+        if (code !== 0 || !isFinite(sdk)) { root.finishSteps(false, "Could not read the Android version of " + device.serial); return false }
+        if (sdk < Model.CAMERA_MIN_SDK) { root.finishSteps(false, "Webcam needs Android 12+; " + Model.deviceTitle(device) + " runs API " + sdk); return false }
+        // Switching phones: let the running scrcpy exit first (relaunch).
+        if (webcamProc.running) { root.relaunch = device; root.stopWebcam() }
+        else root.launchWebcam(device)
+        root.finishSteps(true, "")
+        return false
+      }
+    }])
+  }
+
+  function launchWebcam(device) {
+    webcam = device
+    webcamProc.command = [root.scrcpyPath].concat(Model.webcamArgs(device.serial, {
+      cameraFacing: root.cameraFacing,
+      cameraSize: setting("cameraSize", "1280x720"),
+      cameraFps: setting("cameraFps", 30),
+      cameraMirror: setting("cameraMirror", false),
+      cameraTorch: setting("cameraTorch", false),
+      bitrateMbps: setting("bitrateMbps", 8),
+      wifiBitrateMbps: setting("wifiBitrateMbps", 2),
+      webcamDevice: root.webcamDevice
+    }, device.transport))
+    webcamProc.running = true
+  }
+
+  function stopWebcam() {
+    if (webcamProc.running) webcamProc.signal(15)
+  }
+
+  // Front ↔ back. If the camera is live, restart it so the switch is one
+  // click; scrcpy has no runtime camera switch.
+  function flipCamera() {
+    facingOverride = cameraFacing === "back" ? "front" : "back"
+    if (!webcam) return
+    relaunch = webcam
+    stopWebcam()
+  }
+
+  // Device to start again once the current scrcpy has actually exited.
+  property var relaunch: null
+
+  Process {
+    id: webcamProc
+    stderr: StdioCollector { id: webcamErr }
+    onExited: function(exitCode, exitStatus) {
+      var was = root.webcam
+      root.webcam = null
+      if (root.relaunch) {
+        var again = root.relaunch
+        root.relaunch = null
+        root.launchWebcam(again)
+        return
+      }
+      if (exitCode !== 0 && exitStatus === 0) {
+        var text = String(webcamErr.text || "").trim().split("\n")
+        var last = ""
+        for (var i = text.length - 1; i >= 0; i--) if (/ERROR|WARN/.test(text[i])) { last = text[i]; break }
+        root.webcamError = last || ("scrcpy exited " + exitCode + (was ? " for " + was.serial : ""))
+      }
+    }
   }
 
   Process {

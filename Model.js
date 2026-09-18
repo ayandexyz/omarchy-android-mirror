@@ -8,6 +8,12 @@ var DEFAULT_ADB = "/usr/bin/adb"
 var DEFAULT_SCRCPY = "/usr/bin/scrcpy"
 var SDK_ADB = "~/Android/Sdk/platform-tools/adb"
 var WIFI_PORT = 5555
+// The v4l2loopback node the webcam feature writes to, and the name apps show
+// for it. bin/setup-webcam.sh creates it; both are overridable in settings.
+var WEBCAM_DEVICE = "/dev/video42"
+var WEBCAM_LABEL = "Android Mirror Camera"
+// scrcpy's camera source needs Android 12 (API 31).
+var CAMERA_MIN_SDK = 31
 
 function clamp(value, lo, hi) {
   var n = Number(value)
@@ -75,8 +81,11 @@ function stateHint(state) {
 }
 
 // One-line summary for the bar tooltip / hero meta.
-function stateLabel(devices, mirroring) {
-  if (mirroring) return "Mirroring " + (mirroring.model || mirroring.serial)
+function stateLabel(devices, mirroring, webcam) {
+  var name = function(d) { return d.model || d.serial }
+  if (mirroring && webcam) return "Mirroring + webcam " + name(mirroring)
+  if (mirroring) return "Mirroring " + name(mirroring)
+  if (webcam) return "Webcam " + name(webcam)
   var ready = devices.filter(function(d) { return d.ready }).length
   if (devices.length === 0) return "No phone connected"
   if (ready === 0) return devices.length + " device(s), none ready"
@@ -105,6 +114,43 @@ function scrcpyArgs(serial, s, transport) {
   var extra = String(s.extraArgs || "").trim()
   if (extra !== "") args = args.concat(extra.split(/\s+/))
   return args
+}
+
+// Phone camera → v4l2loopback, no window. The capture size is fixed rather
+// than "max-size" because Chromium keeps the loopback open across calls and
+// copes badly with a format change under it; front/back and fps are the
+// user's, bitrate follows the transport like the mirror does. Audio and
+// playback are off: the frames go to the device node, nowhere else.
+function webcamArgs(serial, s, transport) {
+  var wifi = transport === "wifi"
+  var args = ["-s", serial, "--video-source=camera", "--no-window", "--no-audio"]
+  args.push("--camera-facing=" + (s.cameraFacing === "back" ? "back" : "front"))
+  var size = /^\d{3,4}x\d{3,4}$/.test(String(s.cameraSize || "")) ? s.cameraSize : "1280x720"
+  args.push("--camera-size=" + size)
+  var fps = Math.round(clamp(s.cameraFps, 1, 120))
+  args.push("--camera-fps=" + fps)
+  var mbps = Math.round(clamp(wifi ? s.wifiBitrateMbps : s.bitrateMbps, 1, 50))
+  args.push("--video-bit-rate=" + mbps + "M")
+  if (s.cameraMirror) args.push("--capture-orientation=@flip0")
+  if (s.cameraTorch && s.cameraFacing === "back") args.push("--camera-torch")
+  args.push("--v4l2-sink=" + (String(s.webcamDevice || "").trim() || WEBCAM_DEVICE))
+  return args
+}
+
+// Output of the loopback probe in MirrorBackend: one of
+//   ready\t<card label>     the node exists and is a v4l2 device
+//   notloaded               package installed, module not loaded (or no node)
+//   missing                 v4l2loopback-dkms is not installed
+// Returns {state, label, message} where state is ready|foreign|notloaded|missing.
+function parseLoopback(text, wantLabel, device) {
+  var t = String(text || "").trim()
+  if (t.indexOf("ready\t") === 0) {
+    var label = t.slice(6).trim()
+    if (label === wantLabel) return { state: "ready", label: label, message: "" }
+    return { state: "foreign", label: label, message: device + " exists but is \"" + label + "\", not \"" + wantLabel + "\". Point 'webcam device' at the right node or re-run Set up." }
+  }
+  if (t === "notloaded") return { state: "notloaded", label: "", message: "v4l2loopback is installed but " + device + " does not exist. Run Set up to register it (or reboot)." }
+  return { state: "missing", label: "", message: "The virtual camera is not set up yet." }
 }
 
 // Host and port typed by the user for pair/connect. Accepts "ip", "ip:port",
