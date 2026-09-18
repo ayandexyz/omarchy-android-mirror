@@ -281,18 +281,24 @@ Item {
 
   // --- mirroring ----------------------------------------------------------------
   readonly property string ruleScript: String(Qt.resolvedUrl("bin/hypr-window-rule.sh")).replace(/^file:\/\//, "")
-  Process { id: ruleProc; command: [root.ruleScript] }
+  // The rule is sized from the phone's real screen aspect and the monitor's work
+  // area (bin/window-geometry.sh), so no device or monitor is hardcoded here.
+  Process { id: ruleProc; command: [root.ruleScript, "", root.resolvedAdb] }
 
   function mirror(device) {
     if (!device || !device.ready) return
     if (mirrorProc.running) stopMirror()
     // Float + pin the window without the user editing Hyprland config.
+    ruleProc.command = [root.ruleScript, device.serial, root.resolvedAdb]
     ruleProc.running = true
     mirrorError = ""
     orientation = -1
     mirroring = device
     mirrorProc.command = [root.scrcpyPath].concat(Model.scrcpyArgs(device.serial, {
-      maxSize: setting("maxSize", 1080),
+      // These fallbacks must match barWidget.defaults in manifest.json: the panel
+      // passes only the user's own overrides here, so a stale number in this
+      // object silently wins over the manifest default.
+      maxSize: setting("maxSize", 0),
       bitrateMbps: setting("bitrateMbps", 8),
       wifiMaxSize: setting("wifiMaxSize", 800),
       wifiBitrateMbps: setting("wifiBitrateMbps", 2),
@@ -302,13 +308,18 @@ Item {
       audio: setting("audio", true),
       extraArgs: setting("extraArgs", "")
     }, device.transport))
+    // The panel passes only the user's own overrides, so this line is the only
+    // honest record of which flags actually reached scrcpy:
+    //   journalctl --user -b | grep android-mirror
+    console.log("[android-mirror] " + mirrorProc.command.join(" "))
     mirrorProc.running = true
   }
 
   // --- orientation -----------------------------------------------------------
-  // Wayland gives scrcpy no way to resize its own window, so a rotated phone
-  // ends up letterboxed inside a portrait window. Poll the phone while the
-  // mirror runs and let bin/fit-window.sh swap the window's dimensions.
+  // Wayland gives scrcpy no way to resize its own window, so the window has to be
+  // sized from the outside. Poll the phone while the mirror runs and let
+  // bin/fit-window.sh frame the window around the phone's screen: the phone's
+  // aspect ratio at the largest size the monitor allows, re-fitted on rotation.
   property int orientation: -1
   readonly property string fitScript: String(Qt.resolvedUrl("bin/fit-window.sh")).replace(/^file:\/\//, "")
 
@@ -332,12 +343,24 @@ Item {
       var o = parseInt(m[1], 10)
       if (o === root.orientation) return
       root.orientation = o
-      fitProc.command = [root.fitScript, (o % 2 === 1) ? "landscape" : "portrait"]
+      fitProc.command = [root.fitScript, root.mirroring.serial,
+        (o % 2 === 1) ? "landscape" : "portrait", root.resolvedAdb]
       fitProc.running = true
     }
   }
 
   Process { id: fitProc }
+
+  // Re-frame the live window around the phone screen on demand. A manual resize
+  // is fine, but it breaks the phone's aspect ratio and scrcpy fills the spare
+  // space with bands, so the panel offers one call to snap it back.
+  function refitWindow() {
+    if (!mirroring) return false
+    fitProc.command = [root.fitScript, mirroring.serial,
+      (orientation % 2 === 1) ? "landscape" : "portrait", root.resolvedAdb]
+    fitProc.running = true
+    return true
+  }
 
   function stopMirror() {
     if (mirrorProc.running) mirrorProc.signal(15)
