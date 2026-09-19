@@ -43,6 +43,10 @@ test("parseEndpoint", () => {
 test("verdicts", () => {
   assert.equal(M.pairVerdict("Successfully paired to 192.168.1.5:37123 [guid=adb-x]", "", 0).ok, true)
   assert.equal(M.pairVerdict("Failed: Wrong password or connection was dropped.", "", 1).ok, false)
+  const prompted = M.pairVerdict("Enter pairing code: error: protocol fault (couldn't read status message): Success", "", 1)
+  assert.equal(prompted.ok, false)
+  assert.equal(prompted.message, "error: protocol fault (couldn't read status message): Success")
+  assert.equal(M.pairVerdict("Enter pairing code: Successfully paired to 192.168.1.5:37123 [guid=adb-x]", "", 0).ok, true)
   assert.equal(M.connectVerdict("connected to 192.168.1.5:5555", "", 0).ok, true)
   assert.equal(M.connectVerdict("already connected to 192.168.1.5:5555", "", 0).ok, true)
   assert.equal(M.connectVerdict("failed to connect to '192.168.1.5:5555': Connection refused", "", 0).ok, false)

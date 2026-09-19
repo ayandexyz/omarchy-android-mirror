@@ -120,9 +120,10 @@ function parseEndpoint(text, defaultPort) {
 }
 
 // adb pair prints "Successfully paired to 192.168.1.5:37123 [guid=...]" on
-// success and "Failed: ..." otherwise, both on stdout.
+// success and "Failed: ..." otherwise, both on stdout, after the
+// "Enter pairing code:" prompt the code was typed into.
 function pairVerdict(stdout, stderr, exitCode) {
-  var s = String(stdout || "") + "\n" + String(stderr || "")
+  var s = String(stdout || "").replace(/Enter pairing code:\s*/g, "") + "\n" + String(stderr || "")
   if (/Successfully paired/i.test(s)) return { ok: true, message: "Paired. Now connect using the Wi-Fi debugging address shown on the phone." }
   var fail = s.match(/(Failed:.*|error:.*|cannot.*|.*refused.*)/i)
   return { ok: false, message: fail ? fail[1].trim() : (exitCode === 0 ? "Pairing did not confirm." : "adb pair exited " + exitCode) }

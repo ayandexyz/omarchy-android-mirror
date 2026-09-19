@@ -139,8 +139,10 @@ Item {
   }
 
   // --- one-shot adb actions -------------------------------------------------
-  // `steps` is a queue of {name, args, onDone(stdout, stderr, code) -> bool}
-  // so "enable Wi-Fi" can chain tcpip → ip lookup → connect.
+  // `steps` is a queue of {name, args, stdin?, onDone(stdout, stderr, code) -> bool}
+  // so "enable Wi-Fi" can chain tcpip → ip lookup → connect. `stdin` is a
+  // line written to the process once it starts, for input that must not be
+  // on the command line.
   property var steps: []
   property var stepOut: ({})
 
@@ -166,6 +168,8 @@ Item {
     // args may be a function so a later step can use what an earlier one found.
     var args = typeof step.args === "function" ? step.args() : step.args
     actionProc.command = [root.resolvedAdb].concat(args)
+    actionProc.secret = step.stdin || ""
+    actionProc.stdinEnabled = actionProc.secret !== ""
     actionProc.running = true
   }
 
@@ -178,8 +182,14 @@ Item {
 
   Process {
     id: actionProc
+    // Written to stdin on start and dropped; never stored, logged or shown.
+    property string secret: ""
     stdout: StdioCollector { id: actionOut }
     stderr: StdioCollector { id: actionErr }
+    onStarted: {
+      if (secret !== "") write(secret + "\n")
+      secret = ""
+    }
     onExited: function(exitCode) {
       var step = root.steps[0]
       var verdict = step.onDone(String(actionOut.text || ""), String(actionErr.text || ""), exitCode)
@@ -203,13 +213,16 @@ Item {
 
   // Android 11+ wireless debugging: phone shows an ip:port + 6-digit code
   // under Developer options → Wireless debugging → Pair device with code.
+  // The code answers adb's "Enter pairing code:" prompt over stdin; argv is
+  // world-readable in /proc, a private pipe is not.
   function pair(endpointText, code) {
     var ep = Model.parseEndpoint(endpointText, 0)
     var c = String(code || "").trim()
     if (!ep) { actionOk = false; actionMessage = "Enter the pairing address as ip:port"; return }
     if (!/^\d{6}$/.test(c)) { actionOk = false; actionMessage = "Pairing code is 6 digits"; return }
     runSteps("pair", [{
-      args: ["pair", ep.address, c],
+      args: ["pair", ep.address],
+      stdin: c,
       onDone: function(out, err, code) {
         var v = Model.pairVerdict(out, err, code)
         root.finishSteps(v.ok, v.message)
