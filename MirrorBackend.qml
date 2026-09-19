@@ -160,8 +160,10 @@ Item {
 
   Process {
     id: setupProc
+    // The launcher re-splits its arguments on whitespace, so only single-word
+    // values go through; the label is the script's default.
     command: ["/usr/bin/omarchy-launch-floating-terminal-with-presentation",
-      root.setupScript, root.webcamDevice, Model.WEBCAM_LABEL]
+      root.setupScript, root.webcamDevice]
     onExited: root.checkLoopback()
   }
 

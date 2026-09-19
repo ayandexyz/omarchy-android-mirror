@@ -9,11 +9,11 @@
 #      with a fixed number and a friendly label
 #   3. load the module now
 #
-# Usage: setup-webcam.sh [/dev/videoN] [label]
+# Usage: setup-webcam.sh [/dev/videoN]   (label is fixed: the panel matches on it)
 set -euo pipefail
 
 dev=${1:-/dev/video42}
-label=${2:-Android Mirror Camera}
+label="Android Mirror Camera"
 nr=${dev#/dev/video}
 case "$nr" in ''|*[!0-9]*) echo "Device must look like /dev/video42, got: $dev" >&2; exit 2 ;; esac
 
@@ -35,11 +35,13 @@ printf 'options v4l2loopback devices=1 video_nr=%s card_label="%s" exclusive_cap
   | sudo tee /etc/modprobe.d/$conf_name >/dev/null
 printf 'v4l2loopback\n' | sudo tee /etc/modules-load.d/$conf_name >/dev/null
 
-if lsmod | grep -q '^v4l2loopback ' && [ ! -e "$dev" ]; then
-  # Loaded earlier with different options (another plugin, or a manual
-  # modprobe). Reload so our device shows up; fails harmlessly if in use.
-  echo "v4l2loopback is already loaded without $dev; reloading it…"
-  sudo modprobe -r v4l2loopback || true
+current=$(cat "/sys/class/video4linux/video$nr/name" 2>/dev/null || true)
+if lsmod | grep -q '^v4l2loopback ' && [ "$current" != "$label" ]; then
+  # Loaded earlier with different options (another plugin, a manual modprobe,
+  # or an older version of this script). Reload so the options above apply;
+  # this fails if an app currently has a loopback device open.
+  echo "v4l2loopback is loaded with other options; reloading it…"
+  sudo modprobe -r v4l2loopback || { echo "Close every app using a virtual camera, then run Set up again." >&2; exit 1; }
 fi
 sudo modprobe v4l2loopback
 
