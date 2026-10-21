@@ -37,12 +37,21 @@ function parseDevices(text) {
       var kv = parts[j].split(":")
       if (kv.length === 2) meta[kv[0]] = kv[1]
     }
+    // A serial is Wi-Fi if it is ip:port (tcpip mode), or an mDNS-style adbd
+    // identity ("adb-<guid>._adb-tls-connect._tcp"), which is how Android 11+
+    // wireless-debugging transports appear. Without the mDNS check those
+    // transports get mislabeled as USB.
     var wifi = /^\d+\.\d+\.\d+\.\d+:\d+$/.test(serial) || /^\[?[0-9a-f:]+\]?:\d+$/i.test(serial)
+      || serial.indexOf("_adb-tls") !== -1 || /^adb-[0-9a-f]{8,}/i.test(serial)
     out.push({
       serial: serial,
       state: state,
       transport: wifi ? "wifi" : "usb",
       model: (meta.model || "").replace(/_/g, " "),
+      // Stable physical identity: adb reports device:<product-device> for
+      // every transport of the same hardware, so USB / tcpip / mDNS views of
+      // one phone group together.
+      deviceKey: meta.device || (meta.model || "").replace(/_/g, " ") || serial,
       product: meta.product || "",
       transportId: meta.transport_id || "",
       ready: state === "device"
@@ -51,17 +60,98 @@ function parseDevices(text) {
   return out
 }
 
+// Collapse transports of the same physical phone into one row: adb lists a
+// device once per channel (USB, tcpip ip:port, wireless-debugging mDNS), so
+// a phone reachable two ways otherwise appears twice and inflates counts.
+// Groups keep first-seen order. The preferred channel for mirroring is USB
+// when a ready one exists (lower latency, higher-quality profile), else the
+// first ready Wi-Fi transport.
+function groupDevices(devices) {
+  var groups = []
+  var byKey = {}
+  for (var i = 0; i < devices.length; i++) {
+    var d = devices[i]
+    var key = d.deviceKey || d.serial
+    var g = byKey[key]
+    if (!g) {
+      g = byKey[key] = {
+        key: key,
+        serial: key,
+        model: d.model,
+        transports: [],
+        ready: false,
+        preferred: null,
+        usbTransport: null,
+        wifiReady: false,
+        wifiTransports: []
+      }
+      groups.push(g)
+    }
+    if (!g.model && d.model) g.model = d.model
+    g.transports.push(d)
+    if (d.transport === "usb") {
+      if (!g.usbTransport) g.usbTransport = d
+      if (d.ready && !g.preferred) g.preferred = d
+    } else {
+      g.wifiTransports.push(d)
+      if (d.ready) g.wifiReady = true
+      if (d.ready && !g.wifiPreferred) g.wifiPreferred = d
+    }
+    if (d.ready) g.ready = true
+  }
+  for (var j = 0; j < groups.length; j++)
+    if (!groups[j].preferred) groups[j].preferred = groups[j].wifiPreferred
+  return groups
+}
+
 function deviceTitle(d) {
   if (!d) return ""
   if (d.model !== "") return d.model
   return d.serial
 }
 
-function deviceSubtitle(d) {
+function deviceSubtitle(d, mirroring) {
   if (!d) return ""
-  var bits = [d.transport === "wifi" ? "Wi-Fi" : "USB", d.serial]
-  if (!d.ready) bits.push(stateHint(d.state))
-  return bits.join(" · ")
+  if (!d.transports) {
+    var bits = [d.transport === "wifi" ? "Wi-Fi" : "USB", d.serial]
+    if (!d.ready) bits.push(stateHint(d.state))
+    if (mirroring && mirroring.serial === d.serial)
+      bits.push("live over " + (mirroring.transport === "wifi" ? "Wi-Fi" : "USB"))
+    return bits.join(" · ")
+  }
+  // Group row: one tag per channel; Wi-Fi tags carry the address when adb
+  // reports it (ip:port — mDNS serials are opaque guids). Bare "Wi-Fi" tags
+  // collapse when an addressed one exists; a channel that is not ready
+  // carries its state hint. USB tags come first (preferred channel).
+  var usbTags = []
+  var wifiTags = []
+  for (var i = 0; i < d.transports.length; i++) {
+    var t = d.transports[i]
+    var isWifi = t.transport === "wifi"
+    var hasAddress = isWifi && /^\d+\.\d+\.\d+\.\d+:\d+$/.test(t.serial)
+    var tag = (isWifi ? "Wi-Fi" : "USB") + (hasAddress ? " " + t.serial : "")
+      + (t.ready ? "" : " (" + stateHint(t.state) + ")")
+    var bucket = isWifi ? wifiTags : usbTags
+    if (bucket.indexOf(tag) === -1) bucket.push(tag)
+  }
+  if (wifiTags.indexOf("Wi-Fi") !== -1 && wifiTags.length > 1)
+    wifiTags.splice(wifiTags.indexOf("Wi-Fi"), 1)
+  var out = usbTags.concat(wifiTags).join(" · ")
+  if (mirroring)
+    for (var j = 0; j < d.transports.length; j++)
+      if (d.transports[j].serial === mirroring.serial) {
+        var mt = d.transports[j]
+        var mtIsWifi = mt.transport === "wifi"
+        var mtHasAddress = mtIsWifi && /^\d+\.\d+\.\d+\.\d+:\d+$/.test(mt.serial)
+        var liveLabel = (mtIsWifi ? "Wi-Fi" : "USB") + (mtHasAddress ? " " + mt.serial : "")
+          + (mt.ready ? "" : " (" + stateHint(mt.state) + ")")
+        var all = usbTags.concat(wifiTags)
+        var rest = []
+        for (var k = 0; k < all.length; k++)
+          if (all[k] !== liveLabel) rest.push(all[k])
+        return ["live over " + liveLabel].concat(rest).join(" · ")
+      }
+  return out
 }
 
 function stateHint(state) {

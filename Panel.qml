@@ -22,9 +22,10 @@ Ui.Panel {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   readonly property var devices: backend.devices
-  readonly property var readyDevices: devices.filter(function(d) { return d.ready })
-  readonly property var usbDevices: readyDevices.filter(function(d) { return d.transport === "usb" })
-  readonly property string stateLabel: Model.stateLabel(devices, backend.mirroring)
+  readonly property var deviceGroups: Model.groupDevices(devices)
+  readonly property var readyDevices: deviceGroups.filter(function(g) { return g.ready })
+  readonly property var usbDevices: devices.filter(function(d) { return d.ready && d.transport === "usb" })
+  readonly property string stateLabel: Model.stateLabel(deviceGroups, backend.mirroring)
 
   property int cursor: 0
   property bool showPairing: false
@@ -40,8 +41,8 @@ Ui.Panel {
 
   function mirrorSelected() {
     if (backend.mirroring) { backend.stopMirror(); return }
-    var d = readyDevices[Math.max(0, Math.min(cursor, readyDevices.length - 1))]
-    if (d) backend.mirror(d)
+    var g = readyDevices[Math.max(0, Math.min(cursor, readyDevices.length - 1))]
+    if (g) backend.mirror(g.preferred || g)
   }
 
   function handleBarPress(buttonCode) {
@@ -208,15 +209,24 @@ Ui.Panel {
           }
 
           Repeater {
-            model: root.devices
+            model: root.deviceGroups
 
             delegate: Item {
               id: row
               required property var modelData
               required property int index
-              readonly property bool isMirroring: backend.mirroring && backend.mirroring.serial === modelData.serial
-              readonly property int readyIndex: root.readyDevices.findIndex(function(d) { return d.serial === modelData.serial })
+              readonly property bool isMirroring: backend.mirroring
+                && modelData.transports.some(function(t) { return t.serial === backend.mirroring.serial })
+              readonly property int readyIndex: root.readyDevices.findIndex(function(g) { return g.key === modelData.key })
               readonly property bool selected: modelData.ready && readyIndex === root.cursor
+              // The transport the live session rides on, and a ready channel
+              // of the other kind to offer a live switch to.
+              readonly property var liveTransport: row.isMirroring && backend.mirroring
+                ? row.modelData.transports.find(function(t) { return t.serial === backend.mirroring.serial })
+                : null
+              readonly property var switchTarget: (row.isMirroring && row.modelData.ready && liveTransport)
+                ? (row.modelData.transports.find(function(t) { return t.ready && t.transport !== liveTransport.transport }) || null)
+                : null
               width: parent ? parent.width : 0
               height: rowText.implicitHeight + Style.spacing.sm
 
@@ -243,7 +253,7 @@ Ui.Panel {
                 }
                 Text {
                   width: parent.width
-                  text: Model.deviceSubtitle(row.modelData)
+                  text: Model.deviceSubtitle(row.modelData, row.isMirroring ? backend.mirroring : null)
                   color: row.modelData.ready ? root.dim : root.urgent
                   elide: Text.ElideRight
                   font.family: root.fontFamily
@@ -258,22 +268,31 @@ Ui.Panel {
                 spacing: Style.spacing.xs
 
                 Ui.PanelActionButton {
-                  visible: row.modelData.ready && row.modelData.transport === "usb"
+                  visible: row.modelData.usbTransport && row.modelData.usbTransport.ready && !row.modelData.wifiReady
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                   iconText: "󰖩"
                   tooltipText: "Enable Wi-Fi mirroring for this phone (adb tcpip), then unplug"
                   enabled: !backend.actionBusy
-                  onClicked: backend.enableWifi(row.modelData.serial)
+                  onClicked: backend.enableWifi(row.modelData.usbTransport.serial)
                 }
                 Ui.PanelActionButton {
-                  visible: row.modelData.transport === "wifi"
+                  visible: row.modelData.wifiTransports.length > 0
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                   iconText: "󰅖"
-                  tooltipText: "Disconnect"
+                  tooltipText: "Disconnect this Wi-Fi channel"
                   enabled: !backend.actionBusy
-                  onClicked: backend.disconnect(row.modelData.serial)
+                  onClicked: backend.disconnect(row.modelData.wifiTransports[0].serial)
+                }
+                Ui.PanelActionButton {
+                  visible: row.switchTarget !== null
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  iconText: row.switchTarget && row.switchTarget.transport === "wifi" ? "󰖩" : "󰕓"
+                  tooltipText: "Switch the live session to " + (row.switchTarget && row.switchTarget.transport === "wifi" ? "Wi-Fi" : "USB")
+                  enabled: !backend.actionBusy
+                  onClicked: backend.mirror(row.switchTarget)
                 }
                 Ui.Button {
                   visible: row.modelData.ready
@@ -282,7 +301,7 @@ Ui.Panel {
                   bordered: true
                   foreground: root.foreground
                   fontFamily: root.fontFamily
-                  onClicked: row.isMirroring ? backend.stopMirror() : backend.mirror(row.modelData)
+                  onClicked: row.isMirroring ? backend.stopMirror() : backend.mirror(row.modelData.preferred || row.modelData)
                 }
               }
 
@@ -291,7 +310,7 @@ Ui.Panel {
                 anchors.rightMargin: rowActions.width
                 enabled: row.modelData.ready
                 onClicked: root.cursor = row.readyIndex
-                onDoubleClicked: backend.mirror(row.modelData)
+                onDoubleClicked: backend.mirror(row.modelData.preferred || row.modelData)
               }
             }
           }

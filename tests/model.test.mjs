@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs"
 
 const src = readFileSync(new URL("../Model.js", import.meta.url), "utf8").replace(".pragma library", "")
 const M = new Function(src + `
-  return { parseDevices, scrcpyArgs, parseEndpoint, pairVerdict, connectVerdict, parseWlanIp, stateLabel }`)()
+  return { parseDevices, groupDevices, deviceSubtitle, scrcpyArgs, parseEndpoint, pairVerdict, connectVerdict, parseWlanIp, stateLabel }`)()
 
 test("parseDevices handles usb, wifi, unauthorized, no permissions", () => {
   const out = M.parseDevices(`List of devices attached
@@ -62,4 +62,69 @@ test("stateLabel", () => {
   assert.equal(M.stateLabel([], null), "No phone connected")
   assert.equal(M.stateLabel([{ ready: true }], null), "1 phone ready")
   assert.equal(M.stateLabel([], { model: "Pixel 8" }), "Mirroring Pixel 8")
+})
+
+test("parseDevices labels mDNS wireless-debugging transports as wifi", () => {
+  const out = M.parseDevices(`List of devices attached
+adb-12ab34cd56ef7890._adb-tls-connect._tcp device product:RMX1931EEA model:RMX1931 device:RMX1931L1 transport_id:8
+`)
+  assert.equal(out[0].transport, "wifi")
+  assert.equal(out[0].deviceKey, "RMX1931L1")
+})
+
+test("groupDevices collapses transports of one phone into a single group", () => {
+  const devs = M.parseDevices(`List of devices attached
+192.168.1.42:5555      device product:beyond1 model:SM_G973F device:beyond1 transport_id:4
+adb-12ab34cd56ef7890._adb-tls-connect._tcp device product:beyond1 model:SM_G973F device:beyond1 transport_id:8
+R58M1234ABC            device usb:1-2 product:beyond1 model:SM_G973F device:beyond1 transport_id:3
+ZY22ABCD               unauthorized usb:1-3 transport_id:5
+`)
+  const groups = M.groupDevices(devs)
+  assert.equal(groups.length, 2)
+  assert.equal(groups[0].key, "beyond1")
+  assert.equal(groups[0].transports.length, 3)
+  assert.equal(groups[0].ready, true)
+  // USB is the preferred channel even when Wi-Fi transports came first.
+  assert.equal(groups[0].preferred.serial, "R58M1234ABC")
+  assert.equal(groups[0].usbTransport.serial, "R58M1234ABC")
+  assert.equal(groups[0].wifiTransports.length, 2)
+  assert.equal(M.deviceSubtitle(groups[0]), "USB · Wi-Fi 192.168.1.42:5555")
+  assert.equal(groups[1].key, "ZY22ABCD")
+  assert.equal(groups[1].ready, false)
+  assert.match(M.deviceSubtitle(groups[1]), /tap Allow on the phone/)
+})
+
+test("groupDevices keeps distinct phones apart when device: is missing", () => {
+  const devs = M.parseDevices(`List of devices attached
+0123456789ABCDEF       device transport_id:7
+192.168.1.9:5555       device transport_id:8
+`)
+  const groups = M.groupDevices(devs)
+  assert.equal(groups.length, 2)
+  assert.equal(groups[0].key, "0123456789ABCDEF")
+  assert.equal(groups[1].key, "192.168.1.9:5555")
+  assert.equal(M.deviceSubtitle(groups[1]), "Wi-Fi 192.168.1.9:5555")
+})
+
+test("deviceSubtitle names the channel a live session rides on", () => {
+  const devs = M.parseDevices(`List of devices attached
+R58M1234ABC            device usb:1-2 product:beyond1 model:SM_G973F device:beyond1 transport_id:3
+192.168.1.42:5555      device product:beyond1 model:SM_G973F device:beyond1 transport_id:4
+`)
+  const group = M.groupDevices(devs)[0]
+  assert.equal(M.deviceSubtitle(group), "USB · Wi-Fi 192.168.1.42:5555")
+  // The live channel leads; the available channels follow without repeating it.
+  assert.equal(
+    M.deviceSubtitle(group, { serial: "192.168.1.42:5555", transport: "wifi" }),
+    "live over Wi-Fi 192.168.1.42:5555 · USB")
+  assert.equal(
+    M.deviceSubtitle(group, { serial: "R58M1234ABC", transport: "usb" }),
+    "live over USB · Wi-Fi 192.168.1.42:5555")
+  // Single channel: no redundancy.
+  const wifiOnly = M.groupDevices(M.parseDevices(`List of devices attached
+192.168.1.9:5555       device product:beyond1 model:SM_G973F device:beyond1 transport_id:6
+`))[0]
+  assert.equal(
+    M.deviceSubtitle(wifiOnly, { serial: "192.168.1.9:5555", transport: "wifi" }),
+    "live over Wi-Fi 192.168.1.9:5555")
 })

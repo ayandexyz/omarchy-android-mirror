@@ -35,6 +35,10 @@ Item {
   // The device being mirrored, or null. scrcpy owns the window; when the
   // user closes it the process exits and this clears.
   property var mirroring: null
+  // Device queued while a previous session is still terminating: mirror()
+  // during a live session must not race mirrorProc's onExited, which clears
+  // mirroring and would orphan the freshly started session.
+  property var pendingMirror: null
   property string mirrorError: ""
 
   readonly property int refreshIntervalSec: Math.round(Model.clamp(setting("refreshIntervalSec", 10), 3, 300))
@@ -300,7 +304,11 @@ Item {
 
   function mirror(device) {
     if (!device || !device.ready) return
-    if (mirrorProc.running) stopMirror()
+    if (mirrorProc.running) { pendingMirror = device; stopMirror(); return }
+    startMirror(device)
+  }
+
+  function startMirror(device) {
     // Float + pin the window without the user editing Hyprland config.
     ruleProc.command = [root.ruleScript, device.serial, root.resolvedAdb]
     ruleProc.running = true
@@ -392,6 +400,14 @@ Item {
         var last = ""
         for (var i = text.length - 1; i >= 0; i--) if (/ERROR|WARN/.test(text[i])) { last = text[i]; break }
         root.mirrorError = last || ("scrcpy exited " + exitCode + (was ? " for " + was.serial : ""))
+      }
+      // A mirror() call that arrived while the old session was terminating
+      // queued itself; now that the exit landed, start it for real.
+      if (root.pendingMirror) {
+        var next = root.pendingMirror
+        root.pendingMirror = null
+        if (next.ready) startMirror(next)
+        else root.mirrorError = "device went away before the switch: " + next.serial
       }
     }
   }
