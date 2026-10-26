@@ -63,3 +63,13 @@ test("stateLabel", () => {
   assert.equal(M.stateLabel([{ ready: true }], null), "1 phone ready")
   assert.equal(M.stateLabel([], { model: "Pixel 8" }), "Mirroring Pixel 8")
 })
+
+// Qt 6.12 added a QtQuick type named Color, and it wins over the qs.Commons
+// singleton of the same name wherever a bare `Color` is written. Every bare
+// read then resolves to that type instead: Color.foreground and Color.accent
+// are undefined, and a color property assigned undefined paints as #000000.
+test("Panel.qml qualifies the palette singleton", () => {
+  const panel = readFileSync(new URL("../Panel.qml", import.meta.url), "utf8")
+  assert.match(panel, /^import qs\.Commons as Commons$/m)
+  assert.doesNotMatch(panel, /(^|[^.\w])Color\.[a-zA-Z]/)
+})

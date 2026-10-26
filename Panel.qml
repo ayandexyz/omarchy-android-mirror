@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui as Ui
 import "Model.js" as Model
 
@@ -16,8 +17,8 @@ Ui.Panel {
   ipcTarget: "io.github.ayan-de.android-mirror"
   manageIpc: false
 
-  readonly property color foreground: bar ? bar.foreground : Color.foreground
-  readonly property color urgent: bar ? bar.urgent : Color.urgent
+  readonly property color foreground: bar ? bar.foreground : Commons.Color.foreground
+  readonly property color urgent: bar ? bar.urgent : Commons.Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
@@ -223,7 +224,7 @@ Ui.Panel {
               Rectangle {
                 anchors.fill: parent
                 radius: Style.cornerRadius
-                color: row.selected ? Style.selectedFillFor(root.foreground, Color.accent) : "transparent"
+                color: row.selected ? Style.selectedFillFor(root.foreground, Commons.Color.accent) : "transparent"
               }
 
               Column {
@@ -411,7 +412,7 @@ Ui.Panel {
             if (backend.fetchError !== "") return backend.fetchError
             return ""
           }
-          color: backend.actionBusy ? root.foreground : ((backend.actionOk && backend.mirrorError === "" && backend.fetchError === "") ? Color.accent : root.urgent)
+          color: backend.actionBusy ? root.foreground : ((backend.actionOk && backend.mirrorError === "" && backend.fetchError === "") ? Commons.Color.accent : root.urgent)
           wrapMode: Text.WordWrap
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
