@@ -30,6 +30,7 @@
       "maxSize": 0,
       "bitrateMbps": 8,
       "turnScreenOff": true,
+      "lockOnClose": true,
       "stayAwake": true,
       "audio": true,
       "extraArgs": "",
@@ -115,6 +116,13 @@
         "key": "turnScreenOff",
         "type": "boolean",
         "label": "Turn phone screen off while mirroring",
+        "defaultValue": true
+      },
+      {
+        "key": "lockOnClose",
+        "type": "boolean",
+        "label": "Lock phone when mirroring ends",
+        "description": "Lock and confirm when the mirror closes.",
         "defaultValue": true
       },
       {
