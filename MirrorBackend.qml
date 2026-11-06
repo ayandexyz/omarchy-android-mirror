@@ -298,14 +298,24 @@ Item {
   // area (bin/window-geometry.sh), so no device or monitor is hardcoded here.
   Process { id: ruleProc; command: [root.ruleScript, "", root.resolvedAdb] }
 
+  // Capture cleanup policy and adb at session start, not from mutable settings
+  // after exit. Do not start a new session while the old one is being locked.
+  property bool lockOnExit: false
+  property string mirrorAdb: ""
+  property string lockSerial: ""
+  property string lockAdb: ""
+  property int lockAttempts: 0
+
   function mirror(device) {
-    if (!device || !device.ready) return
-    if (mirrorProc.running) stopMirror()
+    if (!device || !device.ready || lockSerial !== "") return
+    if (mirrorProc.running) { stopMirror(); return }
     // Float + pin the window without the user editing Hyprland config.
     ruleProc.command = [root.ruleScript, device.serial, root.resolvedAdb]
     ruleProc.running = true
     mirrorError = ""
     orientation = -1
+    lockOnExit = setting("lockOnClose", true)
+    mirrorAdb = resolvedAdb
     mirroring = device
     mirrorProc.command = [root.scrcpyPath].concat(Model.scrcpyArgs(device.serial, {
       // These fallbacks must match barWidget.defaults in manifest.json: the panel
@@ -317,6 +327,7 @@ Item {
       wifiBitrateMbps: setting("wifiBitrateMbps", 2),
       wifiMaxFps: setting("wifiMaxFps", 30),
       turnScreenOff: setting("turnScreenOff", true),
+      lockOnClose: lockOnExit,
       stayAwake: setting("stayAwake", true),
       audio: setting("audio", true),
       extraArgs: setting("extraArgs", "")
@@ -379,12 +390,61 @@ Item {
     if (mirrorProc.running) mirrorProc.signal(15)
   }
 
+  // --- post-session lock ----------------------------------------------------
+  // Separate from panel actions: a busy pair/connect must not skip cleanup.
+  // The on-device scrcpy cleanup is the fallback if the desktop itself dies.
+  function lockPhone(serial, adb) {
+    lockSerial = serial
+    lockAdb = adb
+    lockAttempts = 0
+    checkPhoneLock()
+  }
+
+  function checkPhoneLock() {
+    lockAttempts += 1
+    lockProc.command = ["/usr/bin/timeout", "--kill-after=1s", "3s", lockAdb].concat(Model.lockArgs(lockSerial))
+    lockProc.running = true
+  }
+
+  function finishPhoneLock(confirmed) {
+    if (!confirmed) {
+      var message = "Could not confirm the phone locked. Check the phone's lock screen and adb connection."
+      mirrorError = mirrorError === "" ? message : mirrorError + "\n" + message
+      lockNotify.running = true
+    }
+    lockSerial = ""
+    lockAdb = ""
+  }
+
+  Process {
+    id: lockProc
+    stdout: StdioCollector { id: lockOut }
+    onExited: function(exitCode) {
+      if (exitCode === 0 && Model.keyguardShowing(lockOut.text)) root.finishPhoneLock(true)
+      else if (root.lockAttempts < 3) lockRetryTimer.start()
+      else root.finishPhoneLock(false)
+    }
+  }
+
+  Process {
+    id: lockNotify
+    command: ["/usr/bin/notify-send", "Android Mirror", "Could not confirm the phone locked. Check the phone's lock screen and adb connection."]
+  }
+
+  Timer {
+    id: lockRetryTimer
+    interval: 1000
+    repeat: false
+    onTriggered: root.checkPhoneLock()
+  }
+
   Process {
     id: mirrorProc
     stderr: StdioCollector { id: mirrorErr }
     onExited: function(exitCode, exitStatus) {
       var was = root.mirroring
       root.mirroring = null
+      if (was && root.lockOnExit) root.lockPhone(was.serial, root.mirrorAdb)
       // 0 is the user closing the window; SIGTERM from stopMirror is fine too.
       if (exitCode !== 0 && exitStatus === 0) {
         var text = String(mirrorErr.text || "").trim().split("\n")

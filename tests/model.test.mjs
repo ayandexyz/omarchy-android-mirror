@@ -1,4 +1,4 @@
-// node --test tests/
+// node --test tests/*.test.mjs
 // Model.js is a QML library file; strip the pragma and eval it as plain JS.
 import { test } from "node:test"
 import assert from "node:assert/strict"
@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs"
 
 const src = readFileSync(new URL("../Model.js", import.meta.url), "utf8").replace(".pragma library", "")
 const M = new Function(src + `
-  return { parseDevices, scrcpyArgs, parseEndpoint, pairVerdict, connectVerdict, parseWlanIp, stateLabel }`)()
+  return { parseDevices, scrcpyArgs, lockArgs, keyguardShowing, parseEndpoint, pairVerdict, connectVerdict, parseWlanIp, stateLabel }`)()
 
 test("parseDevices handles usb, wifi, unauthorized, no permissions", () => {
   const out = M.parseDevices(`List of devices attached
@@ -24,13 +24,40 @@ ZY22ABCD               unauthorized usb:1-3 transport_id:5
 })
 
 test("scrcpyArgs respects settings", () => {
-  const a = M.scrcpyArgs("X", { maxSize: 0, bitrateMbps: 4, turnScreenOff: false, stayAwake: true, audio: false, extraArgs: "--video-codec=h265" })
+  const a = M.scrcpyArgs("X", { maxSize: 0, bitrateMbps: 4, turnScreenOff: false, lockOnClose: false, stayAwake: true, audio: false, extraArgs: "--video-codec=h265" })
   assert.deepEqual(a, ["-s", "X", "--window-title", "Android Mirror", "--video-bit-rate=4M", "--stay-awake", "--no-audio", "--video-codec=h265"])
 })
 
 test("scrcpyArgs wifi profile trades quality for latency", () => {
   const a = M.scrcpyArgs("192.168.1.5:5555", { maxSize: 1080, bitrateMbps: 8, wifiMaxSize: 800, wifiBitrateMbps: 2, wifiMaxFps: 30, turnScreenOff: true, stayAwake: true, audio: true, extraArgs: "" }, "wifi")
-  assert.deepEqual(a, ["-s", "192.168.1.5:5555", "--window-title", "Android Mirror", "--max-size=800", "--video-bit-rate=2M", "--max-fps=30", "--stay-awake", "--no-audio"])
+  assert.deepEqual(a, ["-s", "192.168.1.5:5555", "--window-title", "Android Mirror", "--max-size=800", "--video-bit-rate=2M", "--max-fps=30", "--power-off-on-close", "--stay-awake", "--no-audio"])
+})
+
+test("scrcpyArgs powers off on close by default on both transports", () => {
+  for (const transport of ["usb", "wifi"]) {
+    for (const turnScreenOff of [true, false]) {
+      for (const lockOnClose of [undefined, true, false]) {
+        const args = M.scrcpyArgs("TEST_DEVICE", { turnScreenOff, lockOnClose }, transport)
+        assert.equal(args.includes("--power-off-on-close"), lockOnClose !== false)
+        assert.equal(args.includes("--turn-screen-off"), turnScreenOff && transport === "usb")
+      }
+    }
+  }
+})
+
+test("lockArgs targets the session device and never toggles power", () => {
+  assert.deepEqual(M.lockArgs("TEST_DEVICE"), [
+    "-s", "TEST_DEVICE", "shell", "input keyevent KEYCODE_SLEEP; dumpsys window"
+  ])
+})
+
+test("keyguardShowing requires an explicit true field", () => {
+  for (const text of ["isKeyguardShowing=true", "  isKeyguardShowing = true\r\n", "mKeyguardState={isKeyguardShowing=true, occluded=false}"]) {
+    assert.equal(M.keyguardShowing(text), true)
+  }
+  for (const text of [undefined, null, "", "isKeyguardShowing=false", "mShowingLockscreen=true", "notisKeyguardShowing=true", "isKeyguardShowing=trueish", "error: device offline"]) {
+    assert.equal(M.keyguardShowing(text), false)
+  }
 })
 
 test("parseEndpoint", () => {

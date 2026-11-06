@@ -100,11 +100,22 @@ function scrcpyArgs(serial, s, transport) {
     if (fps > 0) args.push("--max-fps=" + fps)
   }
   if (s.turnScreenOff && !wifi) args.push("--turn-screen-off")
+  if (s.lockOnClose !== false) args.push("--power-off-on-close")
   if (s.stayAwake) args.push("--stay-awake")
   if (!s.audio || wifi) args.push("--no-audio")
   var extra = String(s.extraArgs || "").trim()
   if (extra !== "") args = args.concat(extra.split(/\s+/))
   return args
+}
+
+// SLEEP is idempotent; POWER would toggle and could wake an already sleeping phone.
+// Keep the remote shell command constant: the serial is a separate adb argument.
+function lockArgs(serial) {
+  return ["-s", serial, "shell", "input keyevent KEYCODE_SLEEP; dumpsys window"]
+}
+
+function keyguardShowing(text) {
+  return /\bisKeyguardShowing\s*=\s*true\b/.test(String(text || ""))
 }
 
 // Host and port typed by the user for pair/connect. Accepts "ip", "ip:port",

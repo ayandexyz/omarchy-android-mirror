@@ -61,6 +61,12 @@ bottleneck. If it still lags: move both devices to **5 GHz** (biggest win),
 get the phone closer to the router, and on the phone set *Keep Wi-Fi on during
 sleep: Always*. Tweak the Wi-Fi values in the widget settings.
 
+### Locking when mirroring ends
+
+**Lock phone when mirroring ends** (on by default) passes `--power-off-on-close`
+to scrcpy, then sends `KEYCODE_SLEEP` and checks the keyguard. If it can't
+confirm the lock, the panel says so. Closing just the panel doesn't lock.
+
 ### Troubleshooting
 
 - *tap Allow on the phone* → the USB debugging prompt is waiting on the phone.
@@ -89,6 +95,7 @@ config; the window rule it registers lives only in the running compositor.
 | `scrcpy` | `scrcpy` | the mirror window, keyboard and mouse |
 | udev rules | `android-udev` | USB access without root |
 | `hyprctl`, `jq` | Omarchy base | float/pin the window and follow rotation |
+| `timeout`, `notify-send` | Omarchy base | bound lock checks and report an unconfirmed lock |
 
 The **Install** button runs `omarchy pkg add scrcpy android-tools android-udev`
 in a terminal, which uses `sudo` (you are asked for your password). No other
@@ -125,7 +132,7 @@ Panel.qml          bar icon + panel UI (the `barWidget` entry point)
 MirrorBackend.qml  adb / scrcpy processes and state
 Model.js           pure parsing + argument building (tested)
 bin/               hypr-window-rule.sh (float/pin rule), fit-window.sh (rotation)
-tests/             node --test tests/
+tests/             node --test tests/*.test.mjs
 ```
 
 ## Development
@@ -134,7 +141,7 @@ tests/             node --test tests/
 
 omarchy plugin add "$PWD" --enable     # or rsync into ~/.config/omarchy/plugins/<id>/
 omarchy plugin validate ~/.config/omarchy/plugins/io.github.ayan-de.android-mirror
-node --test tests/
+node --test tests/*.test.mjs
 ```
 
 ## License
